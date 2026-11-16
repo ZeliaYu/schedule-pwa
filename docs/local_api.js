@@ -28,6 +28,7 @@
     const err = (msg) => { throw new Error(msg); };
 
     async function handle(path, opts) {
+      opts = opts || {};
       const method = (opts.method || 'GET').toUpperCase();
       const [route, q] = qs(path);
       const body = opts.body && !(opts.body instanceof FormData) ? opts.body : null;

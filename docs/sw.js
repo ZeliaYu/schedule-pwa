@@ -2,7 +2,7 @@
    - 静态资源：网络优先，失败回退缓存
    - 全部使用相对路径，兼容 GitHub Pages 的 /repo/ 子路径
 */
-const VERSION = 'v13';
+const VERSION = 'v14';
 const CACHE = `schedule-${VERSION}`;
 
 const ASSETS = [
