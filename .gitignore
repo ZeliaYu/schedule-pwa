@@ -1,17 +1,10 @@
-# 数据库与运行数据（含真实排班，不入库）
-data/*.db
-data/staging/
-data/_regress.db
-
 # 真实排班表（含员工姓名，不入库）
 冻干排班.xlsx
 
-# Python
+# 依赖与工具产物
+node_modules/
 __pycache__/
 *.py[cod]
-*.egg-info/
-.venv/
-venv/
 
 # 编辑器 / 系统
 .vscode/
@@ -19,6 +12,9 @@ venv/
 .DS_Store
 Thumbs.db
 
-# 临时产物
+# 临时文件
 *.log
 *.tmp
+_*.xlsx
+s-*.png
+v-*.png

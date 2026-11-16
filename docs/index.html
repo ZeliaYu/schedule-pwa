@@ -7,11 +7,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="排班">
+<meta name="description" content="每日排班、加班与欠班统计，支持 Excel 导入，数据保存在本机">
 <title>排班管理</title>
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/static/icons/icon-192.png">
-<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
-<link rel="stylesheet" href="/static/app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="app.css">
 </head>
 <body>
 <div id="app">
@@ -44,6 +45,13 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="modalRoot"></div>
 
-<script src="/static/app.js"></script>
+<!-- 计算与存储（本地，无后端） -->
+<script src="xlsx.full.min.js"></script>
+<script src="store.js"></script>
+<script src="stats.js"></script>
+<script src="excel_parse.js"></script>
+<script src="importer.js"></script>
+<script src="local_api.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

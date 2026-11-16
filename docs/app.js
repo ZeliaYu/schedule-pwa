@@ -41,23 +41,24 @@ function initials(name) {
   return s.length >= 3 ? s.slice(-2) : s[0];
 }
 
-/* ------------------------------------------------------------ API */
+/* ------------------------------------------------------------ API
+   纯前端模式：所有请求走本地 API 层（IndexedDB），无网络往返。
+   接口形状与原先的 FastAPI 后端一致，便于迁移与测试。
+*/
+let localApi = null;
+
 async function api(path, opts = {}) {
-  const res = await fetch('/api' + path, {
-    headers: opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
-    ...opts,
-    body: opts.body && !(opts.body instanceof FormData) ? JSON.stringify(opts.body) : opts.body,
-  });
-  let data = null;
-  try { data = await res.json(); } catch { /* 非 JSON */ }
-  if (!res.ok) {
-    const msg = (data && (data.detail || data.message)) || `请求失败 (${res.status})`;
-    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  if (!localApi) throw new Error('本地存储尚未就绪');
+  try {
+    return await localApi(path, opts);
+  } catch (e) {
+    throw e instanceof Error ? e : new Error(String(e));
   }
-  return data;
 }
 
 /* ------------------------------------------------------------ 状态 */
+let store = null;   // Store 实例（IndexedDB）
+
 const state = {
   employees: [],
   shifts: [],
@@ -597,6 +598,7 @@ async function renderDashboard() {
         <span class="sub">以应出勤为基准，向右为加班，向左为欠班</span>
         <div class="spacer"></div>
         <div class="chart-toggle">
+          <button data-export-csv="1" aria-pressed="false" title="导出当前区间统计为 CSV">导出</button>
           <button data-toggle-table="${state.showTable}" aria-pressed="${state.showTable}">${state.showTable ? '图表' : '表格'}</button>
         </div>
       </div>
@@ -681,6 +683,7 @@ async function renderDashboard() {
     state.showTable = !state.showTable;
     renderDashboard();
   }));
+  $$('[data-export-csv]').forEach((b) => b.addEventListener('click', exportStatsCsv));
   $$('[data-metric]').forEach((b) => b.addEventListener('click', () => {
     state.trendMetric = b.dataset.metric;
     renderDashboard();
@@ -1350,6 +1353,9 @@ async function renderPeople() {
           <button class="btn" id="btnBackup">导出备份（JSON）</button>
           <button class="btn" id="btnRestore">从备份恢复</button>
           <button class="btn" id="btnImport2">导入 Excel 排班表</button>
+          <div class="hint-box" style="margin-top:4px">
+            数据只保存在<b>当前浏览器</b>。换设备或清理浏览器数据前，请先导出备份。
+          </div>
         </div>
       </div>
     </div>
@@ -1394,7 +1400,7 @@ async function renderPeople() {
     } catch (e) { toast(e.message, true); }
   });
 
-  $('#btnBackup').addEventListener('click', () => { window.location.href = '/api/backup'; });
+  $('#btnBackup').addEventListener('click', downloadBackup);
   $('#btnRestore').addEventListener('click', openRestore);
   $('#btnImport2').addEventListener('click', openImportWizard);
 }
@@ -1579,10 +1585,11 @@ function openImportWizard() {
         if (!status) return;
         status.innerHTML = '<span class="spin"></span> 正在解析…';
         nextBtn.disabled = true;
-        const fd = new FormData();
-        fd.append('file', file);
         try {
+          const fd = new FormData();
+          fd.append('file', file);
           staged = await api('/import/preview', { method: 'POST', body: fd });
+          if (staged && staged._entries) store.lastPreview = staged;
           status.innerHTML = `<span style="color:var(--good-text);font-weight:600">✓ 解析成功</span>`;
           toast('解析完成，请确认班次映射');
           // 解析成功后自动进入映射步骤
@@ -1600,9 +1607,11 @@ function openImportWizard() {
       // ---- 步骤 2：映射
       const renderMapping = () => {
         const s = staged;
-        const shiftOpts = (selected) => state.shifts.map((sh) =>
-          `<option value="${esc(sh.code)}"${sh.code === selected ? ' selected' : ''}>${esc(sh.name)}</option>`
-        ).join('');
+        const shiftOpts = (selected) => `
+          <option value="${ExcelParse.AUTO_HOURS}"${selected === ExcelParse.AUTO_HOURS ? ' selected' : ''}>按工时自动折算（8 小时 = 1 班）</option>
+          ${state.shifts.map((sh) =>
+            `<option value="${esc(sh.code)}"${sh.code === selected ? ' selected' : ''}>${esc(sh.name)}${Number(sh.weight) !== 1 ? `（${fmtNum(sh.weight)} 班）` : ''}</option>`
+          ).join('')}`;
         wizBody.innerHTML = `
           <div class="summary-grid">
             <div class="summary-item"><div class="k">文件</div><div class="v" style="font-size:13px;word-break:break-all">${esc(s.filename || '—')}</div></div>
@@ -1619,8 +1628,10 @@ function openImportWizard() {
           <div id="mapList">
             ${s.tokens.map((t) => {
               const m = (s.token_meta || {})[t.token] || {};
-              const hint = m.kind === 'work' && m.hours != null ? `${fmtNum(m.hours)} 小时`
-                : m.kind === 'open' ? `${m.start || ''} 起到生产结束`
+              const auto = typeof ExcelParse !== 'undefined' ? ExcelParse.autoShiftForToken(t.token) : null;
+              const hint = m.kind === 'work' && m.hours != null
+                ? `${fmtNum(m.hours)} 小时${auto ? ` → ${fmtNum(auto.weight)} 班` : ''}`
+                : m.kind === 'open' ? `${m.start || ''} 起到生产结束${auto ? ` → ${fmtNum(auto.weight)} 班` : ''}`
                 : m.kind === 'other' ? '未能识别时间段'
                 : m.note ? m.note : '';
               return `
@@ -1764,6 +1775,51 @@ function openRestore() {
   });
 }
 
+/* ------------------------------------------------------------ 导出文件 */
+function downloadBlob(content, filename, mime = 'application/octet-stream') {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadBackup() {
+  try {
+    const json = Importer.exportBackup(store.state);
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+    downloadBlob(json, `排班备份-${stamp}.json`, 'application/json');
+    toast('备份已导出');
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+/** 导出统计表为 CSV（Excel 可直接打开） */
+function exportStatsCsv() {
+  if (!state.stats) return;
+  const hist = !!state.stats.historical;
+  const header = ['姓名', '班组', '应出勤', hist ? '本期出勤' : '已出勤'];
+  if (hist) header.push('累计已上');
+  header.push('加班', '欠班', '净值');
+  const rows = [header];
+  for (const e of state.stats.employees) {
+    const row = [e.name, e.team || '', e.expected, hist ? e.period_actual : e.actual];
+    if (hist) row.push(e.actual);
+    row.push(e.overtime, e.owe, e.net_final);
+    rows.push(row);
+  }
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+  downloadBlob(Importer.toCsv(rows), `排班统计-${stamp}.csv`, 'text/csv;charset=utf-8');
+  toast('统计表已导出');
+}
+
 /* ------------------------------------------------------------ 空状态 */
 function emptyStateHtml() {
   return `<div class="card"><div class="empty" style="padding:64px 24px">
@@ -1773,11 +1829,13 @@ function emptyStateHtml() {
       <button class="btn primary" id="emptyImport">导入 Excel</button>
       <button class="btn" id="emptyAddEmp">手动添加人员</button>
     </div>
-    <div class="hint-box" style="max-width:460px;margin:28px auto 0;text-align:left">
+    <div class="hint-box" style="max-width:500px;margin:28px auto 0;text-align:left">
       支持的表格版式：<br>
       · 行=人员、列=日期的月历表<br>
       · 行=日期、列=人员<br>
-      · 每行一条「日期 / 姓名 / 班次」的明细表
+      · 每行一条「日期 / 姓名 / 班次」的明细表<br>
+      · 按日分块的小表（日期只在每天块首）<br>
+      <span style="color:var(--text-muted)">数据只保存在本机浏览器，可在「人员 → 导出备份」迁移到其他设备。</span>
     </div>
   </div></div>`;
 }
@@ -1840,10 +1898,22 @@ async function init() {
   $$('.tab').forEach((t) => t.addEventListener('click', () => setView(t.dataset.view)));
   $('#btnImport').addEventListener('click', openImportWizard);
 
+  // 纯前端模式：初始化本地存储
+  try {
+    store = new Store(new IdbBackend());
+    await store.init();
+    localApi = createLocalApi(store);
+  } catch (e) {
+    $('#main').innerHTML = `<div class="empty"><h3>无法初始化本地存储</h3>
+      <p>${esc(e.message)}</p>
+      <p style="font-size:12px">若在无痕/隐私模式，浏览器可能禁止 IndexedDB。</p></div>`;
+    return;
+  }
+
   try {
     await loadBootstrap();
   } catch (e) {
-    $('#main').innerHTML = `<div class="empty"><h3>无法连接服务</h3><p>${esc(e.message)}</p></div>`;
+    $('#main').innerHTML = `<div class="empty"><h3>无法读取本地数据</h3><p>${esc(e.message)}</p></div>`;
     return;
   }
 
