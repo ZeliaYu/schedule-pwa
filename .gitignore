@@ -1,0 +1,24 @@
+# 数据库与运行数据（含真实排班，不入库）
+data/*.db
+data/staging/
+data/_regress.db
+
+# 真实排班表（含员工姓名，不入库）
+冻干排班.xlsx
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 临时产物
+*.log
+*.tmp
