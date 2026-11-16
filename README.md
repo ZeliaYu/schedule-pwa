@@ -32,18 +32,14 @@
 
 ## 本地预览
 
-```bat
-双击 启动.bat
-```
-
-或任意静态服务器：
+用任意静态服务器指向 `docs/` 目录即可，例如：
 
 ```bash
 cd docs
 python -m http.server 8765
 ```
 
-打开 <http://localhost:8765>。
+然后打开 <http://localhost:8765>。
 
 > 手机通过局域网 IP 访问时，Service Worker 需要 HTTPS 或 localhost，
 > 因此离线安装只在 GitHub Pages / localhost 下生效。
@@ -123,7 +119,7 @@ docs/                  ← GitHub Pages 发布的目录
   xlsx.full.min.js     SheetJS（解析 xlsx）
 tests/                 Node 对照测试（66 项）
 samples/               示例 Excel（虚构人名）
-启动.bat               本地预览
+tools/make_backup.js   从 Excel 生成可恢复的备份 JSON
 ```
 
 ## 测试
