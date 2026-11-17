@@ -1611,6 +1611,10 @@ async function renderPeople() {
           <div class="hint-box" style="margin-top:4px">
             数据只保存在<b>当前浏览器</b>。换设备或清理浏览器数据前，请先导出备份。
           </div>
+          <button class="btn danger" id="btnClearAll" style="margin-top:8px">清除所有记录</button>
+          <div style="font-size:12px;color:var(--text-muted)">
+            删除全部人员、排班、手工调整与设置，恢复到初始状态。不可撤销。
+          </div>
         </div>
       </div>
     </div>
@@ -1658,6 +1662,7 @@ async function renderPeople() {
   $('#btnBackup').addEventListener('click', downloadBackup);
   $('#btnRestore').addEventListener('click', openRestore);
   $('#btnImport2').addEventListener('click', openImportWizard);
+  $('#btnClearAll').addEventListener('click', openClearAll);
 }
 
 function openEmployeeModal(emp) {
@@ -2059,6 +2064,88 @@ function openRestore() {
           setTimeout(() => { close(); renderPeople(); }, 700);
         } catch (e) {
           status.innerHTML = `<span style="color:var(--critical)">${esc(e.message)}</span>`;
+        }
+      });
+    },
+  });
+}
+
+/* ------------------------------------------------------------ 清除所有记录 */
+function openClearAll() {
+  const empCount = state.employees.length;
+  const assignCount = store.state.assignments.length;
+  const adjCount = store.state.adjustments.length;
+  const shiftCount = store.state.shifts.length;
+  const KEY = '清除';
+
+  openModal({
+    title: '清除所有记录',
+    sub: '此操作不可撤销',
+    body: `
+      <div class="hint-box" style="border-left:3px solid var(--critical)">
+        <b style="color:var(--critical)">将永久删除本机保存的全部数据：</b>
+        <div style="margin-top:6px">
+          · 人员 <b>${empCount}</b> 人<br>
+          · 排班记录 <b>${assignCount}</b> 条<br>
+          · 手工调整 <b>${adjCount}</b> 条<br>
+          · 班次设置将恢复为默认 4 个（当前 ${shiftCount} 个）<br>
+          · 统计起点、工作日设置、隐藏人员等设置一并清空
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn sm" id="clearBackupFirst">先导出备份</button>
+        <span style="font-size:12px;color:var(--text-muted);margin-left:8px">
+          想保留数据，先导出备份，清除后再从备份恢复
+        </span>
+      </div>
+      <div class="field" style="margin-top:18px">
+        <label>确认操作，请输入「${KEY}」</label>
+        <input class="input" id="clearConfirmInput" placeholder="${KEY}" autocomplete="off">
+      </div>`,
+    footer: `<button class="btn" data-close>取消</button>
+      <button class="btn danger" id="clearDo" disabled>永久清除</button>`,
+    onMount: (root, close) => {
+      const input = $('#clearConfirmInput', root);
+      const btn = $('#clearDo', root);
+
+      $('#clearBackupFirst', root).addEventListener('click', downloadBackup);
+
+      const refresh = () => {
+        const ok = input.value.trim() === KEY;
+        btn.disabled = !ok;
+      };
+      input.addEventListener('input', refresh);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !btn.disabled) btn.click(); });
+      refresh();
+      setTimeout(() => input.focus(), 50);
+
+      btn.addEventListener('click', async () => {
+        if (input.value.trim() !== KEY) return;
+        btn.disabled = true;
+        btn.textContent = '正在清除…';
+        try {
+          await api('/reset', { method: 'POST', body: { confirm: true } });
+          await loadBootstrap();
+          state.stats = null;
+          state.monthly = null;
+          state.daily = null;
+          state.schedule = null;
+          state.calendar = null;
+          state.selected.clear();
+          state.bulkMode = false;
+          state.calendarEdit = false;
+          state.showHidden = false;
+          state.rowDrag = null;
+          state.cursor = new Date();
+          state.dayCursor = new Date();
+          setPreset(state.rangePreset);
+          close();
+          setView(state.view);
+          toast('已清除所有记录');
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = '永久清除';
+          toast(e.message, true);
         }
       });
     },

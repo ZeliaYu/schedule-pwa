@@ -333,6 +333,13 @@
         await store.replaceAll(body.data);
         return { ok: true };
       }
+      if (route === '/reset') {
+        if (method !== 'POST') err('请使用 POST');
+        if (!body || body.confirm !== true) err('需要 confirm=true 才会清除数据');
+        store.lastPreview = null;   // 清除后旧的解析结果作废
+        await store.reset();
+        return { ok: true };
+      }
 
       err('未实现的接口：' + route);
     }
