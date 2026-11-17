@@ -24,6 +24,11 @@
     const activeEmps = () => (store.state.employees || [])
       .filter((e) => e.active !== 0)
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
+    /** 全部在职人员（含被屏蔽的），带 hidden 标记 */
+    const allActiveEmps = () => {
+      const hidden = Stats.hiddenIds(store.state);
+      return activeEmps().map((e) => ({ ...e, hidden: hidden.has(e.id) }));
+    };
 
     const err = (msg) => { throw new Error(msg); };
 
@@ -36,7 +41,7 @@
       /* ---------------------------------------------------- 元信息 */
       if (route === '/bootstrap') {
         return {
-          employees: activeEmps(),
+          employees: allActiveEmps(),
           shifts: activeShifts(),
           settings: { ...store.state.settings },
           storage: { local: true },
@@ -263,11 +268,14 @@
         const ids = q.employee_id ? String(q.employee_id).split(',').map(Number).filter(Boolean) : null;
         return Stats.computeStats(store.state, q.date_from, q.date_to, ids, {
           includeInactive: q.include_inactive === 'true',
+          includeHidden: q.include_hidden === 'true',
         });
       }
       if (route === '/stats/monthly') {
         const ids = q.employee_id ? String(q.employee_id).split(',').map(Number).filter(Boolean) : null;
-        return Stats.monthlySeries(store.state, q.date_from, q.date_to, ids);
+        return Stats.monthlySeries(store.state, q.date_from, q.date_to, ids, {
+          includeHidden: q.include_hidden === 'true',
+        });
       }
       if (route === '/stats/daily') {
         return Stats.dailySeries(store.state, q.date_from, q.date_to);

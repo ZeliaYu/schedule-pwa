@@ -77,6 +77,8 @@ const state = {
   calendarEdit: false,
   showTable: false,
   trendMetric: 'net',
+  showHidden: false,     // 月排班/统计是否显示被屏蔽人员
+  rowDrag: null,         // 拖动排序中的行
 };
 
 const shiftByCode = () => Object.fromEntries(state.shifts.map((s) => [s.code, s]));
@@ -509,9 +511,10 @@ async function loadBootstrap() {
 
 async function loadDashboard() {
   const { from, to } = state.range;
+  const inc = state.showHidden ? '&include_hidden=true' : '';
   const [stats, monthly] = await Promise.all([
-    api(`/stats?date_from=${from}&date_to=${to}`),
-    api(`/stats/monthly?date_from=${from}&date_to=${to}`),
+    api(`/stats?date_from=${from}&date_to=${to}${inc}`),
+    api(`/stats/monthly?date_from=${from}&date_to=${to}${inc}`),
   ]);
   state.stats = stats;
   state.monthly = monthly;
@@ -559,6 +562,7 @@ async function renderDashboard() {
   const netSum = emps.reduce((a, e) => a + e.net_final, 0);
   const peopleOT = emps.filter((e) => e.overtime > 0).length;
   const peopleOWE = emps.filter((e) => e.owe > 0).length;
+  const hiddenTotal = state.employees.filter((e) => e.hidden).length;
 
   main.innerHTML = `
     <div class="range-bar">
@@ -567,6 +571,10 @@ async function renderDashboard() {
           <button data-preset="${k}" aria-pressed="${state.rangePreset === k}">${lb}</button>`).join('')}
       </div>
       <span class="chip">${esc(currentRangeLabel())} · 工作日 <b style="margin-left:4px">${t.workdays}</b> 天</span>
+      ${hiddenTotal ? `
+        <button class="btn sm ghost" id="toggleHidden">
+          ${state.showHidden ? '排除已隐藏人员' : `包含已隐藏 (${hiddenTotal})`}
+        </button>` : ''}
     </div>
 
     <div class="kpi-row">
@@ -684,6 +692,10 @@ async function renderDashboard() {
     renderDashboard();
   }));
   $$('[data-export-csv]').forEach((b) => b.addEventListener('click', exportStatsCsv));
+  $('#toggleHidden')?.addEventListener('click', () => {
+    state.showHidden = !state.showHidden;
+    renderDashboard();
+  });
   $$('[data-metric]').forEach((b) => b.addEventListener('click', () => {
     state.trendMetric = b.dataset.metric;
     renderDashboard();
@@ -849,7 +861,12 @@ async function renderMonth() {
     return;
   }
   await loadMonth();
-  const { employees, shifts } = state;
+  const { shifts } = state;
+  // 被屏蔽人员默认不显示，可选择显示
+  const hiddenCount = state.employees.filter((e) => e.hidden).length;
+  const employees = state.showHidden
+    ? state.employees
+    : state.employees.filter((e) => !e.hidden);
   const year = state.cursor.getFullYear();
   const month = state.cursor.getMonth();
   const r = monthRange(year, month);
@@ -884,6 +901,9 @@ async function renderMonth() {
         <button class="btn sm" id="toggleCal" aria-pressed="${state.calendarEdit}">
           ${state.calendarEdit ? '完成日历编辑' : '编辑工作日'}
         </button>
+        <button class="btn sm" id="pickPeople">
+          人员${hiddenCount ? ` (${employees.length}/${state.employees.length})` : ''}
+        </button>
         <button class="btn sm ghost" id="copyPrev">复制上周</button>
       </div>
       ${state.bulkMode ? `
@@ -910,8 +930,15 @@ async function renderMonth() {
           </thead>
           <tbody>
             ${employees.map((emp) => `
-              <tr>
-                <td class="name-col"><span class="name-cell"><span class="avatar">${esc(initials(emp.name))}</span>${esc(emp.name)}</span></td>
+              <tr data-emp-row="${emp.id}" class="${emp.hidden ? 'row-hidden' : ''}">
+                <td class="name-col">
+                  <span class="name-cell">
+                    <span class="row-grip" title="拖动调整顺序" aria-label="拖动调整顺序">⠿</span>
+                    <span class="avatar">${esc(initials(emp.name))}</span>
+                    <span class="row-name">${esc(emp.name)}</span>
+                    ${emp.hidden ? '<span class="row-badge">隐藏</span>' : ''}
+                  </span>
+                </td>
                 ${dayList.map((d) => {
                   const list = assigns[d.date + '|' + emp.id] || [];
                   const selKey = d.date + '|' + emp.id;
@@ -966,6 +993,8 @@ async function renderMonth() {
     renderMonth();
   });
   $('#copyPrev')?.addEventListener('click', copyPreviousWeek);
+  $('#pickPeople')?.addEventListener('click', openPeoplePicker);
+  bindRowDrag(main);
   $('#clearSel')?.addEventListener('click', () => { state.selected.clear(); renderMonth(); });
 
   // 单元格交互
@@ -1071,6 +1100,225 @@ function openShiftPicker(date, empId) {
         } catch (e) { toast(e.message, true); }
       }));
     },
+  });
+}
+
+/* ------------------------------------------------------------ 人员显示与排序 */
+
+/** 人员选择弹窗：勾选显示/隐藏，拖动或用上下按钮调整顺序 */
+function openPeoplePicker() {
+  const all = state.employees.slice();
+  const draft = {
+    hidden: new Set(all.filter((e) => e.hidden).map((e) => e.id)),
+    order: all.map((e) => e.id),
+  };
+
+  const renderList = () => {
+    const byId = Object.fromEntries(all.map((e) => [e.id, e]));
+    return draft.order.map((id, i) => {
+      const e = byId[id];
+      const hidden = draft.hidden.has(id);
+      return `
+        <div class="pp-row ${hidden ? 'is-hidden' : ''}" draggable="true" data-pp-id="${id}">
+          <span class="pp-grip" aria-hidden="true">⠿</span>
+          <label class="pp-check">
+            <input type="checkbox" data-pp-toggle="${id}" ${hidden ? '' : 'checked'}>
+            <span>${esc(e.name)}</span>
+          </label>
+          ${e.team ? `<span class="pp-team">${esc(e.team)}</span>` : ''}
+          <span class="pp-actions">
+            <button class="icon-btn pp-up" data-pp-up="${i}" title="上移" ${i === 0 ? 'disabled' : ''} aria-label="上移">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>
+            </button>
+            <button class="icon-btn pp-down" data-pp-down="${i}" title="下移" ${i === draft.order.length - 1 ? 'disabled' : ''} aria-label="下移">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+          </span>
+        </div>`;
+    }).join('');
+  };
+
+  const m = openModal({
+    title: '人员显示与顺序',
+    sub: '取消勾选可隐藏已离职人员；拖动 ⠿ 或用箭头调整顺序',
+    body: `
+      <div class="pp-toolbar">
+        <button class="btn sm ghost" id="ppAll">全部显示</button>
+        <button class="btn sm ghost" id="ppNone">全部隐藏</button>
+        <span class="pp-count" id="ppCount"></span>
+      </div>
+      <div class="pp-list" id="ppList">${renderList()}</div>
+      <div class="hint-box" style="margin-top:14px">
+        隐藏只是不显示，排班记录仍然保留，随时可以重新勾选显示。
+      </div>`,
+    footer: `<span class="left" style="font-size:12.5px;color:var(--text-muted)">顺序对所有视图生效</span>
+             <button class="btn" data-close>取消</button>
+             <button class="btn primary" id="ppSave">保存</button>`,
+    onMount: (root, close) => {
+      const listEl = $('#ppList', root);
+      const countEl = $('#ppCount', root);
+
+      const refreshCount = () => {
+        const visible = draft.order.length - draft.hidden.size;
+        countEl.textContent = `显示 ${visible} / ${draft.order.length}`;
+      };
+
+      const rerender = () => {
+        listEl.innerHTML = renderList();
+        bindListEvents();
+        refreshCount();
+      };
+
+      const move = (from, to) => {
+        if (to < 0 || to >= draft.order.length) return;
+        const [id] = draft.order.splice(from, 1);
+        draft.order.splice(to, 0, id);
+        rerender();
+      };
+
+      function bindListEvents() {
+        $$('[data-pp-toggle]', listEl).forEach((cb) => {
+          cb.addEventListener('change', () => {
+            const id = Number(cb.dataset.ppToggle);
+            if (cb.checked) draft.hidden.delete(id); else draft.hidden.add(id);
+            const row = cb.closest('.pp-row');
+            if (row) row.classList.toggle('is-hidden', !cb.checked);
+            refreshCount();
+          });
+        });
+        $$('[data-pp-up]', listEl).forEach((b) => b.addEventListener('click', () => {
+          move(Number(b.dataset.ppUp), Number(b.dataset.ppUp) - 1);
+        }));
+        $$('[data-pp-down]', listEl).forEach((b) => b.addEventListener('click', () => {
+          move(Number(b.dataset.ppDown), Number(b.dataset.ppDown) + 1);
+        }));
+        bindPeopleDrag(listEl, draft, rerender);
+      }
+
+      $('#ppAll', root).addEventListener('click', () => { draft.hidden.clear(); rerender(); });
+      $('#ppNone', root).addEventListener('click', () => {
+        draft.order.forEach((id) => draft.hidden.add(id));
+        rerender();
+      });
+      $('#ppSave', root).addEventListener('click', async () => {
+        try {
+          await savePeoplePrefs(draft.order, draft.hidden);
+          close();
+          toast('已保存');
+          renderMonth();
+        } catch (e) { toast(e.message, true); }
+      });
+
+      bindListEvents();
+      refreshCount();
+    },
+  });
+  return m;
+}
+
+/** 保存隐藏名单与排序 */
+async function savePeoplePrefs(order, hiddenSet) {
+  await api('/settings', {
+    method: 'PUT',
+    body: { hidden_employee_ids: [...hiddenSet].join(',') },
+  });
+  // 按拖动结果重写 sort_order
+  await Promise.all(order.map((id, i) => api(`/employees/${id}`, {
+    method: 'PUT', body: { sort_order: i * 10 },
+  })));
+  await loadBootstrap();
+}
+
+/** 弹窗内拖动排序（HTML5 drag） */
+function bindPeopleDrag(listEl, draft, rerender) {
+  let from = null;
+  $$('.pp-row', listEl).forEach((row) => {
+    row.addEventListener('dragstart', (e) => {
+      from = Number(row.dataset.ppId);
+      row.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(from));
+      }
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      from = null;
+      $$('.pp-row', listEl).forEach((r) => r.classList.remove('drag-over'));
+    });
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      row.classList.remove('drag-over');
+      const toId = Number(row.dataset.ppId);
+      if (from === null || from === toId) return;
+      const fromIdx = draft.order.indexOf(from);
+      const toIdx = draft.order.indexOf(toId);
+      if (fromIdx < 0 || toIdx < 0) return;
+      draft.order.splice(fromIdx, 1);
+      draft.order.splice(toIdx, 0, from);
+      rerender();
+    });
+  });
+}
+
+/** 月排班表格内拖动姓名行调整顺序（触屏用长按） */
+function bindRowDrag(main) {
+  const rows = $$('tr[data-emp-row]', main);
+  if (!rows.length) return;
+  let dragId = null;
+
+  rows.forEach((tr) => {
+    const grip = $('.row-grip', tr);
+    if (!grip) return;
+
+    // 只在按住手柄时允许拖动，避免误触排班格
+    grip.addEventListener('mousedown', () => { tr.draggable = true; });
+    grip.addEventListener('touchstart', () => { tr.draggable = true; }, { passive: true });
+    tr.addEventListener('dragend', () => {
+      tr.draggable = false;
+      tr.classList.remove('dragging');
+      rows.forEach((r) => r.classList.remove('drag-over'));
+      dragId = null;
+    });
+    tr.addEventListener('dragstart', (e) => {
+      dragId = Number(tr.dataset.empRow);
+      tr.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(dragId));
+      }
+    });
+    tr.addEventListener('dragover', (e) => {
+      if (dragId === null) return;
+      e.preventDefault();
+      tr.classList.add('drag-over');
+    });
+    tr.addEventListener('dragleave', () => tr.classList.remove('drag-over'));
+    tr.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      tr.classList.remove('drag-over');
+      const targetId = Number(tr.dataset.empRow);
+      if (dragId === null || dragId === targetId) return;
+      const order = rows.map((r) => Number(r.dataset.empRow));
+      const fromIdx = order.indexOf(dragId);
+      const toIdx = order.indexOf(targetId);
+      if (fromIdx < 0 || toIdx < 0) return;
+      order.splice(fromIdx, 1);
+      order.splice(toIdx, 0, dragId);
+      try {
+        await Promise.all(order.map((id, i) => api(`/employees/${id}`, {
+          method: 'PUT', body: { sort_order: i * 10 },
+        })));
+        await loadBootstrap();
+        renderMonth();
+      } catch (err) { toast(err.message, true); }
+    });
   });
 }
 

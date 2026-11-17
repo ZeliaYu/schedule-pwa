@@ -18,7 +18,7 @@ const EMPTY_STATE = () => ({
   adjustments: [],
   calendarDays: {},   // "YYYY-MM-DD" -> { is_workday, note }
   settings: {
-    work_weekdays: '1,2,3,4,5,6',
+    work_weekdays: '1,2,3,4,5',   // 周一~周五（0=周日 … 6=周六）
     stats_start_date: '',
     org_name: '排班管理',
   },

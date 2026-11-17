@@ -27,7 +27,7 @@
   }
 
   function workWeekdays(settings) {
-    const raw = String((settings && settings.work_weekdays) || '0,1,2,3,4,5,6');
+    const raw = String((settings && settings.work_weekdays) || '1,2,3,4,5');
     return new Set(raw.split(',').map((x) => x.trim()).filter((x) => x !== '').map(Number));
   }
 
@@ -50,6 +50,18 @@
     const all = state.shifts || [];
     const active = all.filter((s) => s.active !== 0);
     return active.length ? active : all;
+  }
+
+  /** 被屏蔽（不显示）的人员 id 集合 */
+  function hiddenIds(state) {
+    const raw = String((state.settings && state.settings.hidden_employee_ids) || '');
+    return new Set(raw.split(',').map((x) => x.trim()).filter(Boolean).map(Number));
+  }
+
+  /** 可按需包含/排除被屏蔽人员 */
+  function visibleEmployees(state, includeHidden) {
+    const hidden = includeHidden ? new Set() : hiddenIds(state);
+    return (state.employees || []).filter((e) => !hidden.has(e.id));
   }
 
   function shiftWeight(state, code) {
@@ -77,6 +89,7 @@
 
     const employees = (state.employees || []).filter((e) =>
       (opts.includeInactive || e.active !== 0) &&
+      (opts.includeHidden || !hiddenIds(state).has(e.id)) &&
       (!employeeIds || !employeeIds.length || employeeIds.includes(e.id)));
 
     const shiftRows = (state.shifts || []);
@@ -212,7 +225,8 @@
   }
 
   /** 按月拆分，用于趋势图 */
-  function monthlySeries(state, fromISO, toISO, employeeIds) {
+  function monthlySeries(state, fromISO, toISO, employeeIds, opts) {
+    opts = opts || {};
     const out = [];
     let cur = new Date(parseISO(fromISO).getFullYear(), parseISO(fromISO).getMonth(), 1);
     const end = parseISO(toISO);
@@ -222,7 +236,7 @@
       const mEnd = new Date(y, m + 1, 0);
       const from = isoOf(mStart) < fromISO ? fromISO : isoOf(mStart);
       const to = isoOf(mEnd) > toISO ? toISO : isoOf(mEnd);
-      const res = computeStats(state, from, to, employeeIds);
+      const res = computeStats(state, from, to, employeeIds, opts);
       out.push({
         month: `${y}-${String(m + 1).padStart(2, '0')}`,
         from, to,
@@ -256,8 +270,9 @@
 
   /** 人员 × 日期 班次矩阵 */
   function heatmap(state, fromISO, toISO) {
+    const hidden = hiddenIds(state);
     const emps = (state.employees || [])
-      .filter((e) => e.active !== 0)
+      .filter((e) => e.active !== 0 && !hidden.has(e.id))
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id)
       .map((e) => ({ id: e.id, name: e.name }));
     const days = workdayMap(state, fromISO, toISO);
@@ -283,6 +298,7 @@
   const api = {
     computeStats, monthlySeries, dailySeries, heatmap,
     workdayMap, eachDay, isoOf, parseISO, addDays, todayISO, activeShifts, shiftWeight,
+    hiddenIds, visibleEmployees,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
