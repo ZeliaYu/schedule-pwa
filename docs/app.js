@@ -251,6 +251,7 @@ function divergingBar(container, rows, opts = {}) {
     hit.addEventListener('mousemove', (e) => {
       showTip(`<div class="tip-title">${esc(row.label)}</div>
         <div class="tip-row"><span>加班</span><b>${fmtNum(row.overtime)} 班</b></div>
+        ${row.rest_overtime > 0 ? `<div class="tip-row"><span>└ 休息日</span><b>${fmtNum(row.rest_overtime)} 班</b></div>` : ''}
         <div class="tip-row"><span>欠班</span><b>${fmtNum(row.owe)} 班</b></div>
         <div class="tip-row"><span>应出勤</span><b>${fmtNum(row.expected)} 班</b></div>
         <div class="tip-row"><span>已出勤</span><b>${fmtNum(row.actual)} 班</b></div>`, e);
@@ -560,6 +561,7 @@ async function renderDashboard() {
   const t = stats.totals;
   const emps = stats.employees;
   const netSum = emps.reduce((a, e) => a + e.net_final, 0);
+  const restOTtotal = emps.reduce((a, e) => a + e.rest_overtime, 0);
   const peopleOT = emps.filter((e) => e.overtime > 0).length;
   const peopleOWE = emps.filter((e) => e.owe > 0).length;
   const hiddenTotal = state.employees.filter((e) => e.hidden).length;
@@ -581,7 +583,7 @@ async function renderDashboard() {
       <div class="kpi hero-kpi">
         <div class="label">累计加班</div>
         <div class="value">${fmtNum(t.overtime)}<span class="unit">班</span></div>
-        <div class="meta">${peopleOT} 人存在加班 · 人均 ${fmtNum(peopleOT ? t.overtime / peopleOT : 0)} 班</div>
+        <div class="meta">${peopleOT} 人存在加班 · 人均 ${fmtNum(peopleOT ? t.overtime / peopleOT : 0)} 班${restOTtotal > 0 ? ` · 含休息日 ${fmtNum(restOTtotal)}` : ''}</div>
       </div>
       <div class="kpi">
         <div class="label">累计欠班</div>
@@ -653,6 +655,7 @@ async function renderDashboard() {
       .map((e) => ({
         label: e.name, value: e.net_final, name: e.name,
         expected: e.expected, actual: e.actual, overtime: e.overtime, owe: e.owe,
+        rest_overtime: e.rest_overtime || 0,
         onClick: () => openEmployeeStats(e),
       }));
     const barEl = $('#barChart');
@@ -731,7 +734,10 @@ function tableHtml(emps) {
             <td class="num">${fmtNum(e.expected)}</td>
             <td class="num">${fmtNum(historical ? e.period_actual : e.actual)}</td>
             ${historical ? `<td class="num" style="color:var(--text-muted)">${fmtNum(e.actual)}</td>` : ''}
-            <td class="num ${e.overtime > 0 ? 'num-pos' : 'num-zero'}">${e.overtime > 0 ? '+' + fmtNum(e.overtime) : '0'}</td>
+            <td class="num ${e.overtime > 0 ? 'num-pos' : 'num-zero'}">
+              ${e.overtime > 0 ? '+' + fmtNum(e.overtime) : '0'}
+              ${e.rest_overtime > 0 ? `<div class="cell-sub">含休息日 ${fmtNum(e.rest_overtime)}</div>` : ''}
+            </td>
             <td class="num ${e.owe > 0 ? 'num-neg' : 'num-zero'}">${e.owe > 0 ? '−' + fmtNum(e.owe) : '0'}</td>
             <td>
               <div class="mini-bar">
@@ -775,6 +781,7 @@ function openEmployeeStats(e) {
       </div>
       <div class="hint-box" style="margin-bottom:14px">
         自动差额 <b>${e.net > 0 ? '+' : ''}${fmtNum(e.net)}</b> 班（排班 ${fmtNum(e.scheduled)} + 补出勤 ${fmtNum(e.manual_attend)} − 应出勤 ${fmtNum(e.expected)}）<br>
+        ${e.rest_overtime > 0 ? `休息日上班 <b class="num-pos">+${fmtNum(e.rest_overtime)}</b> 班（${e.rest_days} 天）<br>` : ''}
         手工调整：加班 +${fmtNum(e.manual_overtime)}，欠班 −${fmtNum(e.manual_owe)}
       </div>
       <h4 style="font-size:13px;margin-bottom:8px">手工调整记录</h4>
@@ -1897,13 +1904,24 @@ function openImportWizard() {
           </div>
 
           <h4 style="font-size:13px;margin:20px 0 8px">人员匹配</h4>
-          <div class="name-map-list">
+          <div class="pp-toolbar" style="margin-bottom:8px">
+            <button class="btn sm ghost" id="impAllPeople">全选</button>
+            <button class="btn sm ghost" id="impNoPeople">全不选</button>
+            <span class="pp-count" id="impPeopleCount"></span>
+          </div>
+          <div class="name-map-list" id="impPeopleList">
             ${s.names.map((n) => `
-              <div class="name-row">
-                <span class="src">${esc(n.name)}</span>
+              <div class="name-row" data-imp-name="${esc(n.name)}">
+                <label class="pp-check">
+                  <input type="checkbox" data-imp-toggle="${esc(n.name)}" checked>
+                  <span class="src">${esc(n.name)}</span>
+                </label>
                 <span class="${n.exists ? 'badge-old' : 'badge-new'}">${n.exists ? '已存在' : '将新建'}</span>
               </div>`).join('')}
           </div>
+          <p style="font-size:12.5px;color:var(--text-muted);margin:8px 0 0">
+            取消勾选的人不会导入（表里很多人已离职时用这个）。
+          </p>
 
           <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px">
             <label class="switch"><input type="checkbox" id="optReplace" checked> 覆盖这些人这些日期已有的排班</label>
@@ -1921,6 +1939,24 @@ function openImportWizard() {
               </tbody>
             </table>
           </div>`;
+
+        // 人员勾选：全选 / 全不选
+        const refreshImpCount = () => {
+          const all = $$('[data-imp-toggle]', wizBody);
+          const checked = all.filter((c) => c.checked).length;
+          const el = $('#impPeopleCount', wizBody);
+          if (el) el.textContent = `导入 ${checked} / ${all.length} 人`;
+        };
+        $('#impAllPeople', wizBody)?.addEventListener('click', () => {
+          $$('[data-imp-toggle]', wizBody).forEach((c) => { c.checked = true; });
+          refreshImpCount();
+        });
+        $('#impNoPeople', wizBody)?.addEventListener('click', () => {
+          $$('[data-imp-toggle]', wizBody).forEach((c) => { c.checked = false; });
+          refreshImpCount();
+        });
+        $$('[data-imp-toggle]', wizBody).forEach((c) => c.addEventListener('change', refreshImpCount));
+        refreshImpCount();
       };
 
       // 进入步骤 3 前先收集选项（renderDone 会清空 DOM）
@@ -1973,10 +2009,16 @@ function openImportWizard() {
       nextBtn.addEventListener('click', () => {
         if (step === 0) { renderMapping(); setStep(1); }
         else if (step === 1) {
+          // 未勾选的人员标记为跳过
+          const nameMap = {};
+          $$('[data-imp-toggle]', wizBody).forEach((cb) => {
+            if (!cb.checked) nameMap[cb.dataset.impToggle] = '__skip__';
+          });
           commitOptions = {
             replace: $('#optReplace', wizBody)?.checked ?? true,
             auto_create: $('#optAutoCreate', wizBody)?.checked ?? true,
             create_missing_shifts: $('#optCreateShift', wizBody)?.checked ?? false,
+            name_map: nameMap,
           };
           setStep(2);
           renderDone();

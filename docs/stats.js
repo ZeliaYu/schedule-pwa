@@ -116,6 +116,9 @@
         manual_ot: 0,
         manual_owe: 0,
         manual_attend: 0,
+        rest_overtime: 0,     // 休息日排班的班数（额外加班）
+        rest_scheduled: 0,    // 同上，用于「累计已上」显示
+        rest_days: new Set(),
         adjustments: [],
       });
     }
@@ -125,12 +128,22 @@
       const agg = perEmp.get(a.employee_id);
       if (!agg) continue;
       const w = shiftMap[a.shift_code] ? Number(shiftMap[a.shift_code].weight) : 1;
-      agg.actual += Number.isFinite(w) ? w : 1;
-      agg.by_shift[a.shift_code] = (agg.by_shift[a.shift_code] || 0) + (Number.isFinite(w) ? w : 1);
+      const weight = Number.isFinite(w) ? w : 1;
+      agg.by_shift[a.shift_code] = (agg.by_shift[a.shift_code] || 0) + weight;
       agg.worked_days.add(a.date);
+
       if (a.date < countedFrom) {
-        agg.historical_actual += Number.isFinite(w) ? w : 1;
+        // 统计起点之前：只累计已上，不参与应出勤比较
+        agg.actual += weight;
+        agg.historical_actual += weight;
         agg.historical_days.add(a.date);
+      } else if (!days[a.date]) {
+        // 休息日上班：单独算加班，不计入「已出勤」以免重复计算
+        agg.rest_overtime += weight;
+        agg.rest_days.add(a.date);
+        agg.rest_scheduled += weight;
+      } else {
+        agg.actual += weight;
       }
     }
 
@@ -165,10 +178,13 @@
       } else {
         expected = totalWorkdays;
       }
-      const actual = agg.actual + agg.manual_attend;
-      const periodActual = actual - agg.historical_actual;
+      // agg.actual = 统计起点后工作日班次 + 起点前全部班次
+      const periodActual = agg.actual - agg.historical_actual + agg.manual_attend;
+      const actual = agg.actual + agg.rest_scheduled + agg.manual_attend;  // 累计已上（含休息日）
       const net = periodActual - expected;
-      const netFinal = net + agg.manual_ot + agg.manual_owe;
+      // 休息日上班单独算加班，再叠加到手工调整
+      const restOT = agg.rest_overtime;
+      const netFinal = net + restOT + agg.manual_ot + agg.manual_owe;
       out.push({
         employee_id: e.id,
         name: e.name,
@@ -183,6 +199,8 @@
         scheduled: r2(agg.actual),
         manual_attend: r2(agg.manual_attend),
         worked_days: agg.worked_days.size,
+        rest_overtime: r2(restOT),
+        rest_days: agg.rest_days.size,
         net: r2(net),
         net_final: r2(netFinal),
         auto_overtime: r2(Math.max(0, net)),
