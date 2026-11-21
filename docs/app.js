@@ -61,7 +61,6 @@ let store = null;   // Store 实例（IndexedDB）
 
 const state = {
   employees: [],
-  shifts: [],
   settings: {},
   view: 'dashboard',
   rangePreset: 'month',
@@ -81,9 +80,26 @@ const state = {
   rowDrag: null,         // 拖动排序中的行
 };
 
-const shiftByCode = () => Object.fromEntries(state.shifts.map((s) => [s.code, s]));
 const empById = () => Object.fromEntries(state.employees.map((e) => [e.id, e]));
-const shiftColor = (code) => (shiftByCode()[code] || {}).color || 'var(--text-muted)';
+
+/** 紧凑时段：08:00-16:00 → 8-16，跨整点不够精确时保留到半小时 */
+function slotShort(a) {
+  if (!(a.start && a.end)) return fmtNum(a.hours) + 'h';
+  const hm = (v) => {
+    const [hh, mm] = String(v).split(':');
+    return mm && mm !== '00' ? `${+hh}:${mm}` : String(+hh);
+  };
+  return `${hm(a.start)}-${hm(a.end)}`;
+}
+/** 单条排班的悬停提示 */
+function slotTitle(a) {
+  const parts = [];
+  parts.push(a.start && a.end ? `${a.start}-${a.end}（${fmtNum(a.hours)} 小时）` : `${fmtNum(a.hours)} 小时`);
+  if (a.content) parts.push(a.content);
+  return parts.join(' · ');
+}
+/** 当天排班合计工时 */
+const dayHours = (list) => (list || []).reduce((s, a) => s + (Number(a.hours) || 0), 0);
 
 /* ------------------------------------------------------------ 提示 & 模态 */
 let toastTimer = null;
@@ -250,11 +266,11 @@ function divergingBar(container, rows, opts = {}) {
     });
     hit.addEventListener('mousemove', (e) => {
       showTip(`<div class="tip-title">${esc(row.label)}</div>
-        <div class="tip-row"><span>加班</span><b>${fmtNum(row.overtime)} 班</b></div>
-        ${row.rest_overtime > 0 ? `<div class="tip-row"><span>└ 休息日</span><b>${fmtNum(row.rest_overtime)} 班</b></div>` : ''}
-        <div class="tip-row"><span>欠班</span><b>${fmtNum(row.owe)} 班</b></div>
-        <div class="tip-row"><span>应出勤</span><b>${fmtNum(row.expected)} 班</b></div>
-        <div class="tip-row"><span>已出勤</span><b>${fmtNum(row.actual)} 班</b></div>`, e);
+        <div class="tip-row"><span>加班</span><b>${fmtNum(row.overtime)} 小时</b></div>
+        ${row.rest_overtime > 0 ? `<div class="tip-row"><span>└ 休息日</span><b>${fmtNum(row.rest_overtime)} 小时</b></div>` : ''}
+        <div class="tip-row"><span>欠班</span><b>${fmtNum(row.owe)} 小时</b></div>
+        <div class="tip-row"><span>应出勤</span><b>${fmtNum(row.expected)} 小时</b></div>
+        <div class="tip-row"><span>已出勤</span><b>${fmtNum(row.actual)} 小时</b></div>`, e);
     });
     hit.addEventListener('mouseleave', hideTip);
     svg.appendChild(hit);
@@ -395,7 +411,7 @@ function heatmap(container, data) {
   svg.style.height = height + 'px';
 
   const cellMap = {};
-  for (const c of data.cells) cellMap[c.employee_id + '|' + c.date] = c.shifts;
+  for (const c of data.cells) cellMap[c.employee_id + '|' + c.date] = c;
 
   // 表头日期
   days.forEach((d, i) => {
@@ -417,10 +433,12 @@ function heatmap(container, data) {
 
     days.forEach((d, ci) => {
       const x = nameW + ci * cellW;
-      const codes = cellMap[e.id + '|' + d.date] || [];
+      const cell = cellMap[e.id + '|' + d.date];
+      const slots = cell ? cell.slots : [];
+      const hours = cell ? cell.hours : 0;
       const r = { x: x + gap / 2, y: y + gap / 2, width: cellW - gap, height: cellH - gap };
 
-      if (!codes.length) {
+      if (!slots.length) {
         // 空单元格：工作日画虚线框（缺勤待补），休息日画浅底
         if (d.is_workday) {
           svg.appendChild(svgEl('rect', {
@@ -431,22 +449,25 @@ function heatmap(container, data) {
           svg.appendChild(svgEl('rect', { ...r, rx: 3, fill: 'var(--surface-2)', opacity: 0.65 }));
         }
       } else {
-        // 多班次上下堆叠，段间留 2px 空隙
-        const segH = (r.height - (codes.length - 1) * gap) / codes.length;
-        codes.forEach((code, k) => {
-          svg.appendChild(svgEl('rect', {
-            x: r.x, y: r.y + k * (segH + gap),
-            width: r.width, height: Math.max(2, segH), rx: 2,
-            fill: shiftColor(code),
-          }));
-        });
+        // 按工时着色：标准工时 = 满色，超出加深，不足变浅
+        const std = data.daily_hours || 8;
+        const ratio = Math.max(0, hours / std);
+        svg.appendChild(svgEl('rect', {
+          ...r, rx: 3,
+          fill: 'var(--series-1)',
+          'fill-opacity': Math.min(1, 0.28 + ratio * 0.62).toFixed(2),
+        }));
       }
 
       const hit = svgEl('rect', { x, y, width: cellW, height: cellH, fill: 'transparent' });
       hit.addEventListener('mousemove', (ev) => {
-        const names = codes.map((c) => (shiftByCode()[c] || {}).name || c).join('、');
+        const detail = slots.map((s) => {
+          const t = s.start && s.end ? `${s.start}-${s.end} ` : '';
+          return `${t}${fmtNum(s.hours)}h${s.content ? ' · ' + esc(s.content) : ''}`;
+        }).join('<br>');
         showTip(`<div class="tip-title">${esc(e.name)} · ${d.date.slice(5)} ${weekdayCN(parseISO(d.date))}</div>
-          <div class="tip-row"><span>班次</span><b>${esc(names || (d.is_workday ? '未排班' : '休息'))}</b></div>`, ev);
+          <div class="tip-row"><span>工时</span><b>${slots.length ? fmtNum(hours) + ' 小时' : (d.is_workday ? '未排班' : '休息')}</b></div>
+          ${detail ? `<div class="tip-row" style="display:block"><span style="display:block;line-height:1.6">${detail}</span></div>` : ''}`, ev);
       });
       hit.addEventListener('mouseleave', hideTip);
       svg.appendChild(hit);
@@ -503,7 +524,6 @@ function setPreset(preset) {
 async function loadBootstrap() {
   const data = await api('/bootstrap');
   state.employees = data.employees;
-  state.shifts = data.shifts;
   state.settings = data.settings;
   const org = $('#orgName');
   if (org) org.textContent = data.settings.org_name || '排班管理';
@@ -533,9 +553,11 @@ async function loadMonth() {
 
 async function loadDay() {
   const d = iso(state.dayCursor);
+  // 当月区间用于「当月加班/欠班」列
+  const r = monthRange(state.dayCursor.getFullYear(), state.dayCursor.getMonth());
   const [schedule, stats] = await Promise.all([
     api(`/schedule?date_from=${d}&date_to=${d}`),
-    api(`/stats?date_from=${d}&date_to=${d}`),
+    api(`/stats?date_from=${r.from}&date_to=${r.to}`),
   ]);
   state.schedule = schedule;
   state.dayStats = stats;
@@ -582,22 +604,22 @@ async function renderDashboard() {
     <div class="kpi-row">
       <div class="kpi hero-kpi">
         <div class="label">累计加班</div>
-        <div class="value">${fmtNum(t.overtime)}<span class="unit">班</span></div>
-        <div class="meta">${peopleOT} 人存在加班 · 人均 ${fmtNum(peopleOT ? t.overtime / peopleOT : 0)} 班${restOTtotal > 0 ? ` · 含休息日 ${fmtNum(restOTtotal)}` : ''}</div>
+        <div class="value">${fmtNum(t.overtime)}<span class="unit">小时</span></div>
+        <div class="meta">${peopleOT} 人存在加班 · 人均 ${fmtNum(peopleOT ? t.overtime / peopleOT : 0)} 小时${restOTtotal > 0 ? ` · 含休息日 ${fmtNum(restOTtotal)}` : ''}</div>
       </div>
       <div class="kpi">
         <div class="label">累计欠班</div>
-        <div class="value">${fmtNum(t.owe)}<span class="unit">班</span></div>
+        <div class="value">${fmtNum(t.owe)}<span class="unit">小时</span></div>
         <div class="meta">${peopleOWE} 人存在欠班</div>
       </div>
       <div class="kpi">
         <div class="label">已出勤</div>
-        <div class="value">${fmtNum(stats.historical ? t.period_actual : t.actual)}<span class="unit">人班</span></div>
-        <div class="meta">应出勤 ${fmtNum(t.expected)} 人班${stats.historical ? ` · 历史另计 ${fmtNum(t.historical_actual)}` : ''}</div>
+        <div class="value">${fmtNum(stats.historical ? t.period_actual : t.actual)}<span class="unit">小时</span></div>
+        <div class="meta">应出勤 ${fmtNum(t.expected)} 小时${stats.historical ? ` · 历史另计 ${fmtNum(t.historical_actual)}` : ''}</div>
       </div>
       <div class="kpi">
         <div class="label">综合净额</div>
-        <div class="value ${netSum > 0 ? 'num-pos' : netSum < 0 ? 'num-neg' : ''}">${netSum > 0 ? '+' : ''}${fmtNum(netSum)}<span class="unit">班</span></div>
+        <div class="value ${netSum > 0 ? 'num-pos' : netSum < 0 ? 'num-neg' : ''}">${netSum > 0 ? '+' : ''}${fmtNum(netSum)}<span class="unit">小时</span></div>
         <div class="meta">加班 − 欠班（全员合计）</div>
       </div>
     </div>
@@ -605,7 +627,7 @@ async function renderDashboard() {
     <div class="card" style="margin-bottom:16px">
       <div class="card-head">
         <h2>每人加班 / 欠班</h2>
-        <span class="sub">以应出勤为基准，向右为加班，向左为欠班</span>
+        <span class="sub">以应出勤为基准，向右为加班，向左为欠班（单位：小时）</span>
         <div class="spacer"></div>
         <div class="chart-toggle">
           <button data-export-csv="1" aria-pressed="false" title="导出当前区间统计为 CSV">导出</button>
@@ -629,7 +651,7 @@ async function renderDashboard() {
       </div>
         <div class="card-body">
         ${legendHtml([
-          { name: state.trendMetric === 'net' ? '加班（班）' : '欠班（班）', color: state.trendMetric === 'net' ? 'var(--series-1)' : 'var(--series-8)' },
+          { name: state.trendMetric === 'net' ? '加班（小时）' : '欠班（小时）', color: state.trendMetric === 'net' ? 'var(--series-1)' : 'var(--series-8)' },
         ])}
         <div id="trendChart" class="chart-wrap"></div>
       </div>
@@ -638,11 +660,15 @@ async function renderDashboard() {
     <div class="card">
       <div class="card-head">
         <h2>排班密度</h2>
-        <span class="sub">人员 × 日期</span>
+        <span class="sub">人员 × 日期 · 颜色越深工时越多</span>
         <div class="spacer"></div>
       </div>
       <div class="card-body">
-        ${legendHtml(state.shifts.map((s) => ({ name: s.name, color: s.color })))}
+        ${legendHtml([
+          { name: `不足 ${fmtNum((stats.daily_hours || 8) * 0.5)} 小时`, color: 'color-mix(in srgb, var(--series-1) 40%, transparent)' },
+          { name: `约 ${fmtNum(stats.daily_hours || 8)} 小时`, color: 'color-mix(in srgb, var(--series-1) 70%, transparent)' },
+          { name: '超时', color: 'var(--series-1)' },
+        ])}
         <div id="heatmap" class="chart-wrap"></div>
       </div>
     </div>
@@ -714,6 +740,7 @@ function tableHtml(emps) {
   const maxAbs = Math.max(1, ...rows.map((r) => Math.abs(r.net_final)));
   const historical = !!state.stats?.historical;
   return `
+  <div class="hint-box" style="margin-bottom:10px">下表数值单位均为<b>小时</b>。</div>
   <div class="table-wrap">
     <table class="data">
       <thead>
@@ -736,7 +763,7 @@ function tableHtml(emps) {
             ${historical ? `<td class="num" style="color:var(--text-muted)">${fmtNum(e.actual)}</td>` : ''}
             <td class="num ${e.overtime > 0 ? 'num-pos' : 'num-zero'}">
               ${e.overtime > 0 ? '+' + fmtNum(e.overtime) : '0'}
-              ${e.rest_overtime > 0 ? `<div class="cell-sub">含休息日 ${fmtNum(e.rest_overtime)}</div>` : ''}
+              ${e.rest_overtime > 0 ? `<div class="cell-sub">含休息日 ${fmtNum(e.rest_overtime)}h</div>` : ''}
             </td>
             <td class="num ${e.owe > 0 ? 'num-neg' : 'num-zero'}">${e.owe > 0 ? '−' + fmtNum(e.owe) : '0'}</td>
             <td>
@@ -769,9 +796,10 @@ function tableHtml(emps) {
 }
 
 function openEmployeeStats(e) {
+  const entries = e.entries || [];
   openModal({
     title: e.name,
-    sub: `${state.range.from} 至 ${state.range.to}`,
+    sub: `${state.range.from} 至 ${state.range.to} · 单位：小时`,
     body: `
       <div class="summary-grid">
         <div class="summary-item"><div class="k">应出勤</div><div class="v">${fmtNum(e.expected)}</div></div>
@@ -780,11 +808,27 @@ function openEmployeeStats(e) {
         <div class="summary-item"><div class="k">欠班</div><div class="v num-neg">${e.owe > 0 ? fmtNum(e.owe) : '0'}</div></div>
       </div>
       <div class="hint-box" style="margin-bottom:14px">
-        自动差额 <b>${e.net > 0 ? '+' : ''}${fmtNum(e.net)}</b> 班（排班 ${fmtNum(e.scheduled)} + 补出勤 ${fmtNum(e.manual_attend)} − 应出勤 ${fmtNum(e.expected)}）<br>
-        ${e.rest_overtime > 0 ? `休息日上班 <b class="num-pos">+${fmtNum(e.rest_overtime)}</b> 班（${e.rest_days} 天）<br>` : ''}
-        手工调整：加班 +${fmtNum(e.manual_overtime)}，欠班 −${fmtNum(e.manual_owe)}
+        自动差额 <b>${e.net > 0 ? '+' : ''}${fmtNum(e.net)}</b> 小时（工作日排班 ${fmtNum(e.scheduled)} + 补出勤 ${fmtNum(e.manual_attend)} − 应出勤 ${fmtNum(e.expected)}）<br>
+        ${e.rest_overtime > 0 ? `休息日上班 <b class="num-pos">+${fmtNum(e.rest_overtime)}</b> 小时（${e.rest_days} 天）<br>` : ''}
+        手工调整：加班 +${fmtNum(e.manual_overtime)}，欠班 −${fmtNum(e.manual_owe)}<br>
+        每天标准工时 ${fmtNum(e.daily_hours)} 小时
       </div>
-      <h4 style="font-size:13px;margin-bottom:8px">手工调整记录</h4>
+      <h4 style="font-size:13px;margin-bottom:8px">排班明细（共 ${entries.length} 条）</h4>
+      <div class="table-wrap" style="max-height:240px;overflow-y:auto">
+        <table class="data">
+          <thead><tr><th>日期</th><th>时间段</th><th class="num">工时</th><th>工作内容</th></tr></thead>
+          <tbody>
+            ${entries.length ? entries.map((a) => `
+              <tr>
+                <td>${a.date.slice(5)}${a.rest ? ' <span class="row-badge">休息日</span>' : ''}</td>
+                <td>${a.start && a.end ? `${a.start}-${a.end}` : '—'}</td>
+                <td class="num">${fmtNum(a.hours)}</td>
+                <td style="color:var(--text-secondary)">${esc(a.content || '')}</td>
+              </tr>`).join('') : '<tr><td colspan="4" class="person-empty">区间内没有排班</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      <h4 style="font-size:13px;margin:16px 0 8px">手工调整记录</h4>
       ${e.adjustments.length ? e.adjustments.map((a) => `
         <div class="adjust-item">
           <span class="kind ${a.kind}">${{ overtime: '加班', owe: '欠班', attend: '补出勤' }[a.kind] || a.kind}</span>
@@ -818,8 +862,8 @@ function openAdjustModal(emp) {
           </select>
         </div>
         <div class="field">
-          <label>数量（班）</label>
-          <input class="input" id="adjAmount" type="number" step="0.5" value="1" min="0">
+          <label>数量（小时）</label>
+          <input class="input" id="adjAmount" type="number" step="0.5" value="8" min="0">
         </div>
         <div class="field full">
           <label>日期</label>
@@ -831,7 +875,7 @@ function openAdjustModal(emp) {
         </div>
       </div>
       <div class="hint-box" style="margin-top:14px">
-        「补出勤」计入已出勤，可直接抵消欠班；「加班」「欠班」直接加减最终净值。
+        「补出勤」计入已出勤，可直接抵消欠班；「加班」「欠班」直接加减最终净值。单位为小时。
       </div>
     `,
     footer: `<button class="btn" data-close>取消</button><button class="btn primary" id="adjSave">保存</button>`,
@@ -868,7 +912,6 @@ async function renderMonth() {
     return;
   }
   await loadMonth();
-  const { shifts } = state;
   // 被屏蔽人员默认不显示，可选择显示
   const hiddenCount = state.employees.filter((e) => e.hidden).length;
   const employees = state.showHidden
@@ -886,7 +929,6 @@ async function renderMonth() {
     const k = a.date + '|' + a.employee_id;
     (assigns[k] = assigns[k] || []).push(a);
   }
-  const codeColor = shiftByCode();
 
   main.innerHTML = `
     <div class="card">
@@ -916,11 +958,11 @@ async function renderMonth() {
       ${state.bulkMode ? `
         <div class="sched-toolbar" style="background:var(--accent-soft);border-bottom:1px solid var(--border)">
           <span class="chip" id="selCount">已选 ${state.selected.size} 格</span>
-          <span style="color:var(--text-muted);font-size:12.5px">选中后点班次应用到全部：</span>
-          ${shifts.map((s) => `<button class="btn sm" data-bulk-shift="${s.code}">
-            <span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block"></span>${esc(s.name)}
-          </button>`).join('')}
-          <button class="btn sm danger" data-bulk-shift="__clear">清除</button>
+          <span style="color:var(--text-muted);font-size:12.5px">批量填入工时（小时）：</span>
+          <input class="input" id="bulkHours" type="number" step="0.5" min="0.5" value="${fmtNum(state.settings.daily_hours || 8)}"
+                 style="width:80px;height:32px">
+          <button class="btn sm" id="bulkApply">应用到选中</button>
+          <button class="btn sm danger" data-bulk="__clear">清除</button>
           <button class="btn sm ghost" id="clearSel">取消选择</button>
         </div>` : ''}
       <div class="grid-scroll">
@@ -949,13 +991,16 @@ async function renderMonth() {
                 ${dayList.map((d) => {
                   const list = assigns[d.date + '|' + emp.id] || [];
                   const selKey = d.date + '|' + emp.id;
+                  const h = dayHours(list);
                   return `<td class="${d.isWork ? '' : 'weekend'}">
                     <div class="cell ${list.length ? 'filled' : ''} ${state.selected.has(selKey) ? 'sel' : ''}"
                          data-date="${d.date}" data-emp="${emp.id}"
-                         title="${esc(list.map((a) => (codeColor[a.shift_code] || {}).name || a.shift_code).join('、') || '未排班')}">
-                      ${list.length
-                        ? list.map((a) => `<span class="shift-tag" style="background:${shiftColor(a.shift_code)}">${esc((codeColor[a.shift_code] || {}).name || a.shift_code)}</span>`).join('')
-                        : `<span class="cell-rest">${d.isWork ? '' : '休'}</span>`}
+                         title="${esc(list.map(slotTitle).join('\n') || '未排班')}">
+                      ${list.length === 1
+                        ? `<span class="slot-tag">${esc(slotShort(list[0]))}</span><span class="cell-hours">${fmtNum(h)}h</span>`
+                        : list.length > 1
+                          ? `<span class="slot-tag">${list.length} 段</span><span class="cell-hours">${fmtNum(h)}h</span>`
+                          : `<span class="cell-rest">${d.isWork ? '' : '休'}</span>`}
                     </div>
                   </td>`;
                 }).join('')}
@@ -1022,32 +1067,33 @@ async function renderMonth() {
   });
 
   // 批量应用
-  $$('[data-bulk-shift]', main).forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (!state.selected.size) { toast('先选择格子', true); return; }
-      const code = btn.dataset.bulkShift;
-      const groups = [...state.selected].map((k) => {
-        const [date, emp] = k.split('|');
-        return { date, employee_id: Number(emp) };
-      });
-      try {
-        // 按日期分组批量提交
-        const byDate = {};
-        for (const g of groups) (byDate[g.date] = byDate[g.date] || []).push(g.employee_id);
-        for (const [date, ids] of Object.entries(byDate)) {
-          await api('/schedule/bulk', {
-            method: 'POST',
-            body: code === '__clear'
-              ? { action: 'clear', dates: [date], employee_ids: ids }
-              : { action: 'set', dates: [date], employee_ids: ids, shift_code: code, replace: true },
-          });
-        }
-        toast(code === '__clear' ? `已清除 ${groups.length} 格` : `已排班 ${groups.length} 格`);
-        state.selected.clear();
-        renderMonth();
-      } catch (e) { toast(e.message, true); }
+  const doBulk = async (clear) => {
+    if (!state.selected.size) { toast('先选择格子', true); return; }
+    const hours = clear ? 0 : Number($('#bulkHours', main)?.value);
+    if (!clear && !(hours > 0)) { toast('工时需大于 0', true); return; }
+    const groups = [...state.selected].map((k) => {
+      const [date, emp] = k.split('|');
+      return { date, employee_id: Number(emp) };
     });
-  });
+    try {
+      // 按日期分组批量提交
+      const byDate = {};
+      for (const g of groups) (byDate[g.date] = byDate[g.date] || []).push(g.employee_id);
+      for (const [date, ids] of Object.entries(byDate)) {
+        await api('/schedule/bulk', {
+          method: 'POST',
+          body: clear
+            ? { action: 'clear', dates: [date], employee_ids: ids }
+            : { action: 'set', dates: [date], employee_ids: ids, hours },
+        });
+      }
+      toast(clear ? `已清除 ${groups.length} 格` : `已排班 ${groups.length} 格`);
+      state.selected.clear();
+      renderMonth();
+    } catch (e) { toast(e.message, true); }
+  };
+  $('#bulkApply', main)?.addEventListener('click', () => doBulk(false));
+  $('[data-bulk="__clear"]', main)?.addEventListener('click', () => doBulk(true));
 
   // 工作日历编辑
   if (state.calendarEdit) {
@@ -1065,49 +1111,173 @@ async function renderMonth() {
   }
 }
 
+/**
+ * 单元格编辑：安排时间段、工时与工作内容。
+ * 同一天可以有多条（例如上午一班、晚上又顶一班）。
+ */
 function openShiftPicker(date, empId) {
   const emp = empById()[empId];
-  const list = (state.schedule.assignments || []).filter(
-    (a) => a.date === date && a.employee_id === empId);
+  const list = (state.schedule.assignments || [])
+    .filter((a) => a.date === date && a.employee_id === empId)
+    .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
   const d = parseISO(date);
+  const isWork = state.calendar?.days?.find?.((x) => x.date === date)?.is_workday ?? true;
+  const std = Number(state.settings.daily_hours) || 8;
+
+  const slotRows = () => list.map((a) => `
+    <div class="slot-row" data-slot-id="${a.id}">
+      <div class="slot-times">
+        <input class="input" type="time" data-slot-start value="${esc(a.start || '')}">
+        <span class="dash">–</span>
+        <input class="input" type="time" data-slot-end value="${esc(a.end || '')}">
+      </div>
+      <div class="slot-hours">
+        <input class="input" type="number" step="0.5" min="0.5" data-slot-hours value="${fmtNum(a.hours)}">
+        <span class="unit">小时</span>
+      </div>
+      <input class="input slot-content" data-slot-content value="${esc(a.content || '')}" placeholder="干什么活，如：理瓶">
+      <button class="icon-btn slot-del" data-slot-del title="删除这条" aria-label="删除">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>`).join('');
+
+  const totalHours = () => list.reduce((s, a) => s + (Number(a.hours) || 0), 0);
+
   openModal({
     title: `${emp ? emp.name : ''} · ${date.slice(5)} ${weekdayCN(d)}`,
-    sub: '选择班次',
+    sub: `${isWork ? '工作日' : '休息日（上班算加班）'} · 标准 ${fmtNum(std)} 小时`,
+    wide: true,
     body: `
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${state.shifts.map((s) => `
-          <button class="btn" data-pick="${s.code}" style="height:44px;min-width:96px;justify-content:flex-start">
-            <span style="width:10px;height:10px;border-radius:3px;background:${s.color};display:inline-block"></span>
-            ${esc(s.name)}${Number(s.weight) !== 1 ? `<span style="color:var(--text-muted);font-size:11.5px">×${fmtNum(s.weight)}</span>` : ''}
-            ${list.some((a) => a.shift_code === s.code) ? '<span style="margin-left:6px;color:var(--accent)">✓</span>' : ''}
-          </button>`).join('')}
-        <button class="btn" data-pick="__clear" style="height:44px;min-width:96px;justify-content:flex-start;color:var(--critical)">清除</button>
-      </div>
-      <div class="hint-box" style="margin-top:16px">
-        同一天可以排多个班次（如白班 + 中班），每个班次按权重计入出勤。
+      <div id="slotList">${slotRows() || '<div class="person-empty">这天还没有排班</div>'}</div>
+      <div class="slot-total" id="slotTotal">合计 <b>${fmtNum(totalHours())}</b> 小时</div>
+
+      <div class="slot-add">
+        <h4 style="font-size:13px;margin:18px 0 8px">新增一条</h4>
+        <div class="slot-add-grid">
+          <div class="field"><label>开始</label><input class="input" type="time" id="newStart" value="08:00"></div>
+          <div class="field"><label>结束</label><input class="input" type="time" id="newEnd" value="16:00"></div>
+          <div class="field"><label>工时</label><input class="input" type="number" step="0.5" min="0.5" id="newHours" value="8"></div>
+          <div class="field slot-add-content"><label>工作内容</label><input class="input" id="newContent" placeholder="如：理瓶 / 灌装 / 包装"></div>
+        </div>
+        <div class="hint-box" style="margin-top:10px">
+          改了起止时间，工时会自动按时间差算；也可以直接手改工时（比如中间休息要扣掉）。
+          <div style="margin-top:8px">
+            常用时段：
+            ${[['08:00', '16:00'], ['16:00', '24:00'], ['08:00', '12:00'], ['08:00', '20:00']].map(([s, e]) => {
+              const h = hoursBetweenStr(s, e);
+              return `<button class="btn sm ghost" data-quick="${s}-${e}">${s}-${e}（${fmtNum(h)}h）</button>`;
+            }).join('')}
+          </div>
+        </div>
       </div>
     `,
-    footer: `<button class="btn" data-close>关闭</button>`,
+    footer: `<button class="btn danger left" id="slotClear">清空这天</button>
+      <button class="btn" data-close>关闭</button>
+      <button class="btn primary" id="slotAdd">添加</button>`,
     onMount: (root, close) => {
-      $$('[data-pick]', root).forEach((btn) => btn.addEventListener('click', async () => {
-        const code = btn.dataset.pick;
-        try {
-          if (code === '__clear') {
-            await api(`/schedule?date=${date}&employee_id=${empId}`, { method: 'DELETE' });
-          } else {
-            const exists = list.some((a) => a.shift_code === code);
-            if (exists) {
-              await api(`/schedule?date=${date}&employee_id=${empId}&shift_code=${code}`, { method: 'DELETE' });
-            } else {
-              await api('/schedule', { method: 'POST', body: { date, employee_id: empId, shift_code: code } });
-            }
-          }
-          close();
-          renderMonth();
-        } catch (e) { toast(e.message, true); }
+      const startEl = $('#newStart', root), endEl = $('#newEnd', root), hoursEl = $('#newHours', root);
+      const syncHours = () => {
+        const h = hoursBetweenStr(startEl.value, endEl.value);
+        if (h > 0) hoursEl.value = fmtNum(h);
+      };
+      startEl.addEventListener('change', syncHours);
+      endEl.addEventListener('change', syncHours);
+
+      // 快捷时段
+      $$('[data-quick]', root).forEach((b) => b.addEventListener('click', () => {
+        const [s, e] = b.dataset.quick.split('-');
+        startEl.value = s; endEl.value = e; syncHours();
       }));
+
+      // 编辑已有条目（失焦即保存）
+      const bindSlot = (row) => {
+        const id = Number(row.dataset.slotId);
+        const save = async () => {
+          const s = $('[data-slot-start]', row).value;
+          const e = $('[data-slot-end]', row).value;
+          const h = Number($('[data-slot-hours]', row).value);
+          const content = $('[data-slot-content]', row).value;
+          if (!(h > 0)) { toast('工时需大于 0', true); return; }
+          try {
+            await api(`/schedule/${id}`, { method: 'PUT', body: { start: s, end: e, hours: h, content } });
+            const idx = list.findIndex((x) => x.id === id);
+            if (idx >= 0) Object.assign(list[idx], { start: s, end: e, hours: h, content });
+            $('#slotTotal', root).innerHTML = `合计 <b>${fmtNum(totalHours())}</b> 小时`;
+            toast('已保存');
+          } catch (err) { toast(err.message, true); }
+        };
+        $('[data-slot-start]', row).addEventListener('change', save);
+        $('[data-slot-end]', row).addEventListener('change', save);
+        $('[data-slot-hours]', row).addEventListener('change', save);
+        $('[data-slot-content]', row).addEventListener('change', save);
+        $('[data-slot-del]', row).addEventListener('click', async () => {
+          try {
+            await api(`/schedule/${id}`, { method: 'DELETE' });
+            const idx = list.findIndex((x) => x.id === id);
+            if (idx >= 0) list.splice(idx, 1);
+            row.remove();
+            if (!list.length) $('#slotList', root).innerHTML = '<div class="person-empty">这天还没有排班</div>';
+            $('#slotTotal', root).innerHTML = `合计 <b>${fmtNum(totalHours())}</b> 小时`;
+            toast('已删除');
+          } catch (err) { toast(err.message, true); }
+        });
+      };
+      $$('.slot-row', root).forEach(bindSlot);
+
+      $('#slotAdd', root).addEventListener('click', async () => {
+        const s = startEl.value, e = endEl.value;
+        const h = Number(hoursEl.value) || hoursBetweenStr(s, e);
+        if (!(h > 0)) { toast('请填写工时或时间段', true); return; }
+        try {
+          const row = await api('/schedule', {
+            method: 'POST',
+            body: { date, employee_id: empId, start: s, end: e, hours: h, content: $('#newContent', root).value.trim() },
+          });
+          list.push(row);
+          $('#newContent', root).value = '';
+          renderList();
+          toast('已添加');
+        } catch (err) { toast(err.message, true); }
+      });
+
+      $('#slotClear', root).addEventListener('click', async () => {
+        if (!list.length) return;
+        if (!confirm(`清空 ${date}「${emp ? emp.name : ''}」的全部排班？`)) return;
+        try {
+          await api(`/schedule?date=${date}&employee_id=${empId}`, { method: 'DELETE' });
+          list.length = 0;
+          renderList();
+          toast('已清空');
+        } catch (err) { toast(err.message, true); }
+      });
+
+      function renderList() {
+        const wrap = $('#slotList', root);
+        wrap.innerHTML = slotRows() || '<div class="person-empty">这天还没有排班</div>';
+        $$('.slot-row', root).forEach(bindSlot);
+        $('#slotTotal', root).innerHTML = `合计 <b>${fmtNum(totalHours())}</b> 小时`;
+      }
+
+      // 关闭后刷新月视图
+      const btnClose = $('.modal-foot [data-close]', root);
+      btnClose?.addEventListener('click', () => setTimeout(() => renderMonth(), 0));
+      const headClose = $('.modal-head [data-close]', root);
+      headClose?.addEventListener('click', () => setTimeout(() => renderMonth(), 0));
     },
-  });
+    });
+}
+
+/** "08:00" + "16:00" → 小时数（跨夜自动 +24） */
+function hoursBetweenStr(start, end) {
+  const m = (v) => {
+    const r = /^(\d{1,2}):(\d{2})$/.exec(String(v || ''));
+    return r ? +r[1] * 60 + +r[2] : null;
+  };
+  const a = m(start), b = m(end);
+  if (a === null || b === null) return 0;
+  let mins = b - a;
+  if (mins <= 0) mins += 24 * 60;
+  return Math.round(mins / 60 * 100) / 100;
 }
 
 /* ------------------------------------------------------------ 人员显示与排序 */
@@ -1372,7 +1542,14 @@ async function copyPreviousWeek() {
             // 先清空目标日这些人的班次，再写入
             await api('/schedule/bulk', { method: 'POST', body: { action: 'clear', dates: [date], employee_ids: ids } });
             for (const a of items) {
-              await api('/schedule', { method: 'POST', body: { date, employee_id: a.employee_id, shift_code: a.shift_code, source: 'copy' } });
+              await api('/schedule', {
+                method: 'POST',
+                body: {
+                  date, employee_id: a.employee_id,
+                  start: a.start, end: a.end, hours: a.hours, content: a.content,
+                  source: 'copy',
+                },
+              });
               count++;
             }
           }
@@ -1398,11 +1575,11 @@ async function renderDay() {
   const d = parseISO(target);
   const isToday = target === todayISO();
   const dayCol = state.calendar?.days?.find?.((x) => x.date === target);
-  const assigns = state.schedule.assignments.filter((a) => a.date === target);
-  const byShift = {};
-  for (const s of state.shifts) byShift[s.code] = [];
-  for (const a of assigns) (byShift[a.shift_code] = byShift[a.shift_code] || []).push(a);
+  const assigns = state.schedule.assignments
+    .filter((a) => a.date === target)
+    .sort((a, b) => (a.start || '99').localeCompare(b.start || '99'));
   const stats = state.dayStats;
+  const totalHours = dayHours(assigns);
 
   main.innerHTML = `
     <div class="range-bar" style="justify-content:space-between">
@@ -1416,57 +1593,57 @@ async function renderDay() {
         </button>
         <button class="btn sm ghost" id="todayBtn">回到今天</button>
       </div>
-      <span class="chip">出勤 <b style="margin-left:4px">${assigns.length}</b> 人次</span>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="chip">出勤 <b style="margin-left:4px">${new Set(assigns.map((a) => a.employee_id)).size}</b> 人</span>
+        <span class="chip">合计 <b style="margin-left:4px">${fmtNum(totalHours)}</b> 小时</span>
+      </div>
     </div>
 
     <div class="card" style="margin-bottom:16px">
       <div class="card-head">
         <h2>${isToday ? '今日排班' : '当日排班'}</h2>
-        <span class="sub">${target} ${weekdayCN(d)}</span>
+        <span class="sub">${target} ${weekdayCN(d)}${dayCol && dayCol.is_workday === false ? ' · 休息日（上班算加班）' : ''}</span>
         <div class="spacer"></div>
+        <button class="btn sm primary" id="addShiftBtn">+ 排班</button>
       </div>
       <div class="card-body">
-        <div class="shift-columns">
-          ${state.shifts.map((s) => {
-            const list = byShift[s.code] || [];
-            return `
-            <div class="shift-col">
-              <div class="shift-col-head">
-                <span style="width:10px;height:10px;border-radius:3px;background:${s.color}"></span>
-                ${esc(s.name)}
-                <span class="count">${list.length} 人</span>
-              </div>
-              <div class="person-list">
-                ${list.length ? list.map((a) => {
-                  const e = empById()[a.employee_id] || { name: a.name };
-                  return `<div class="person-item" data-go-emp="${a.employee_id}">
-                    <span class="avatar">${esc(initials(e.name))}</span>
-                    <span>${esc(e.name)}</span>
-                    ${a.note ? `<span class="meta">${esc(a.note)}</span>` : ''}
-                  </div>`;
-                }).join('') : '<div class="person-empty">无人排班</div>'}
-                <button class="btn sm ghost" data-add-shift="${s.code}" style="margin-top:4px">+ 添加人员</button>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>
+        ${assigns.length ? `
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>时间段</th><th class="num">工时</th><th>人员</th><th>工作内容</th><th></th></tr></thead>
+            <tbody>
+              ${assigns.map((a) => {
+                const e = empById()[a.employee_id] || { name: a.name };
+                return `<tr>
+                  <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${a.start && a.end ? `${a.start}–${a.end}` : '—'}</td>
+                  <td class="num">${fmtNum(a.hours)}</td>
+                  <td><div class="name-cell"><span class="avatar">${esc(initials(e.name))}</span>${esc(e.name)}</div></td>
+                  <td style="color:var(--text-secondary)">${esc(a.content || '—')}</td>
+                  <td style="text-align:right"><button class="btn sm ghost" data-edit-slot="${a.employee_id}" data-slot-date="${a.date}">编辑</button></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>` : '<div class="empty" style="padding:36px 0"><p style="color:var(--text-muted)">这天还没有排班</p></div>'}
       </div>
     </div>
 
     <div class="card">
-      <div class="card-head"><h2>当日出勤核对</h2><span class="sub">相对应出勤的实时差额</span></div>
+      <div class="card-head"><h2>当日出勤核对</h2><span class="sub">相对应出勤的实时差额（单位：小时）</span></div>
       <div class="card-body">
         <div class="table-wrap">
           <table class="data">
-            <thead><tr><th>姓名</th><th>今日班次</th><th class="num">今日班数</th><th class="num">当月加班</th><th class="num">当月欠班</th></tr></thead>
+            <thead><tr><th>姓名</th><th>今日时间段</th><th class="num">今日工时</th><th class="num">当月加班</th><th class="num">当月欠班</th></tr></thead>
             <tbody>
               ${state.employees.map((e) => {
                 const mine = assigns.filter((a) => a.employee_id === e.id);
                 const st = (stats?.employees || []).find((s) => s.employee_id === e.id) || {};
                 return `<tr>
                   <td><div class="name-cell"><span class="avatar">${esc(initials(e.name))}</span>${esc(e.name)}</div></td>
-                  <td>${mine.length ? mine.map((a) => `<span class="shift-tag" style="background:${shiftColor(a.shift_code)}">${esc((shiftByCode()[a.shift_code] || {}).name || a.shift_code)}</span>`).join(' ') : '<span class="num-zero">休息</span>'}</td>
-                  <td class="num">${fmtNum(mine.reduce((s, a) => s + Number((shiftByCode()[a.shift_code] || {}).weight || 1), 0))}</td>
+                  <td>${mine.length
+                    ? mine.map((a) => `<span class="slot-tag" title="${esc(slotTitle(a))}">${esc(a.start && a.end ? `${a.start}-${a.end}` : fmtNum(a.hours) + 'h')}</span>`).join(' ')
+                    : '<span class="num-zero">休息</span>'}</td>
+                  <td class="num">${fmtNum(dayHours(mine))}</td>
                   <td class="num ${st.overtime > 0 ? 'num-pos' : 'num-zero'}">${st.overtime > 0 ? '+' + fmtNum(st.overtime) : '0'}</td>
                   <td class="num ${st.owe > 0 ? 'num-neg' : 'num-zero'}">${st.owe > 0 ? '−' + fmtNum(st.owe) : '0'}</td>
                 </tr>`;
@@ -1481,41 +1658,33 @@ async function renderDay() {
   $('#prevDay').addEventListener('click', () => { state.dayCursor = addDays(state.dayCursor, -1); renderDay(); });
   $('#nextDay').addEventListener('click', () => { state.dayCursor = addDays(state.dayCursor, 1); renderDay(); });
   $('#todayBtn').addEventListener('click', () => { state.dayCursor = new Date(); renderDay(); });
-  $$('[data-add-shift]').forEach((btn) => btn.addEventListener('click', () => {
-    openAddPersonToShift(target, btn.dataset.addShift);
+  $('#addShiftBtn').addEventListener('click', () => openAddPersonToDay(target));
+  $$('[data-edit-slot]').forEach((btn) => btn.addEventListener('click', () => {
+    openShiftPicker(btn.dataset.slotDate, Number(btn.dataset.editSlot));
   }));
 }
 
-function openAddPersonToShift(date, shiftCode) {
+/** 当天排班：选人 → 进入该人的时段编辑 */
+function openAddPersonToDay(date) {
   const assigned = new Set((state.schedule.assignments || [])
-    .filter((a) => a.date === date && a.shift_code === shiftCode).map((a) => a.employee_id));
+    .filter((a) => a.date === date).map((a) => a.employee_id));
   openModal({
-    title: `添加人员 · ${(shiftByCode()[shiftCode] || {}).name || shiftCode}`,
+    title: '选择人员排班',
     sub: date,
     body: `<div style="display:flex;flex-wrap:wrap;gap:8px">
       ${state.employees.map((e) => `
         <button class="btn" data-add-emp="${e.id}" style="${assigned.has(e.id) ? 'border-color:var(--accent);color:var(--accent)' : ''}">
           ${assigned.has(e.id) ? '✓ ' : ''}${esc(e.name)}
         </button>`).join('')}
-    </div>`,
+    </div>
+    <div class="hint-box" style="margin-top:14px">点人名进入时段编辑，可以填开始时间、结束时间和工作内容。</div>`,
     footer: `<button class="btn" data-close>完成</button>`,
     onMount: (root, close) => {
-      $$('[data-add-emp]', root).forEach((btn) => btn.addEventListener('click', async () => {
+      $$('[data-add-emp]', root).forEach((btn) => btn.addEventListener('click', () => {
         const id = Number(btn.dataset.addEmp);
-        try {
-          if (assigned.has(id)) {
-            await api(`/schedule?date=${date}&employee_id=${id}&shift_code=${shiftCode}`, { method: 'DELETE' });
-            assigned.delete(id);
-            btn.style.borderColor = ''; btn.style.color = ''; btn.textContent = empById()[id].name;
-          } else {
-            await api('/schedule', { method: 'POST', body: { date, employee_id: id, shift_code: shiftCode } });
-            assigned.add(id);
-            btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)';
-            btn.textContent = '✓ ' + empById()[id].name;
-          }
-        } catch (e) { toast(e.message, true); }
+        close();
+        setTimeout(() => openShiftPicker(date, id), 0);
       }));
-      // 关闭弹窗后刷新今日视图
       root.querySelector('.modal-foot [data-close]')?.addEventListener('click', () => {
         setTimeout(() => renderDay(), 0);
       });
@@ -1546,8 +1715,8 @@ async function renderPeople() {
                   <td>${esc(e.employee_no || '—')}</td>
                   <td>${esc(e.team || '—')}</td>
                   <td>${e.expect_mode === 'fixed'
-                    ? `<span class="chip">固定 ${fmtNum(e.monthly_quota ?? 0)} 班/月</span>`
-                    : '<span class="chip">跟随工作日历</span>'}</td>
+                    ? `<span class="chip">固定 ${fmtNum(e.monthly_quota ?? 0)} 小时/月</span>`
+                    : `<span class="chip">跟随工作日历${Number(e.daily_hours) > 0 ? ` · ${fmtNum(e.daily_hours)}h/天` : ''}</span>`}</td>
                   <td style="text-align:right;white-space:nowrap">
                     <button class="btn sm ghost" data-edit-emp="${e.id}">编辑</button>
                     <button class="btn sm danger" data-del-emp="${e.id}">移除</button>
@@ -1561,30 +1730,24 @@ async function renderPeople() {
 
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card">
-        <div class="card-head">
-          <h2>班次</h2>
-          <div class="spacer"></div>
-          <button class="btn sm" id="addShift">+ 班次</button>
-        </div>
-        <div class="card-body">
-          ${state.shifts.map((s) => `
-            <div class="adjust-item">
-              <span class="legend-swatch" style="background:${s.color};width:12px;height:12px;border-radius:3px"></span>
-              <span style="font-weight:600">${esc(s.name)}</span>
-              <span class="note">记 ${fmtNum(s.weight)} 班</span>
-              <button class="btn sm ghost del" data-edit-shift="${s.code}">编辑</button>
-            </div>`).join('')}
-        </div>
-      </div>
-
-      <div class="card">
         <div class="card-head"><h2>统计口径</h2></div>
         <div class="card-body">
+          <div class="field" style="margin-bottom:14px">
+            <label>每人每天标准工时</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="input" type="number" step="0.5" min="0.5" id="dailyHours"
+                     value="${fmtNum(state.settings.daily_hours ?? 8)}" style="max-width:110px">
+              <span style="font-size:12.5px;color:var(--text-muted)">小时 / 天</span>
+            </div>
+            <span style="font-size:12px;color:var(--text-muted)">
+              应出勤 = 工作日天数 × 这个值；也可以单独给某人设不同的标准。
+            </span>
+          </div>
           <div class="field" style="margin-bottom:14px">
             <label>统计起点</label>
             <input class="input" type="date" id="statsStart" value="${esc(state.settings.stats_start_date || '')}">
             <span style="font-size:12px;color:var(--text-muted)">
-              此日之前的记录只累计「已上多少班」，不计应出勤和欠班。清洗历史表后从某天起用本 App 排班时设置。
+              此日之前的记录只累计「已上多少小时」，不计应出勤和欠班。清洗历史表后从某天起用本 App 排班时设置。
             </span>
           </div>
           <div class="field" style="margin-bottom:12px">
@@ -1598,7 +1761,7 @@ async function renderPeople() {
             </div>
             <span style="font-size:12px;color:var(--text-muted)">用于自动计算「应出勤」；月视图中「编辑工作日」的单日设置优先</span>
           </div>
-          <button class="btn sm" id="saveStatsStart">保存统计起点</button>
+          <button class="btn sm" id="saveStatsStart">保存统计口径</button>
         </div>
       </div>
 
@@ -1634,10 +1797,6 @@ async function renderPeople() {
       toast('已移除');
     } catch (err) { toast(err.message, true); }
   }));
-  $('#addShift').addEventListener('click', () => openShiftModal(null));
-  $$('[data-edit-shift]').forEach((b) => b.addEventListener('click', () => {
-    openShiftModal(state.shifts.find((s) => s.code === b.dataset.editShift));
-  }));
 
   $$('[data-weekday]').forEach((btn) => btn.addEventListener('click', async () => {
     const i = Number(btn.dataset.weekday);
@@ -1652,10 +1811,16 @@ async function renderPeople() {
 
   $('#saveStatsStart')?.addEventListener('click', async () => {
     try {
+      const dh = Number($('#dailyHours').value);
+      if (!(dh > 0)) { toast('标准工时需大于 0', true); return; }
       state.settings = await api('/settings', {
-        method: 'PUT', body: { stats_start_date: $('#statsStart').value || '' },
+        method: 'PUT',
+        body: {
+          stats_start_date: $('#statsStart').value || '',
+          daily_hours: dh,
+        },
       });
-      toast($('#statsStart').value ? '统计起点已保存' : '已清除统计起点');
+      toast('统计口径已保存');
     } catch (e) { toast(e.message, true); }
   });
 
@@ -1678,28 +1843,37 @@ function openEmployeeModal(emp) {
         <div class="field full">
           <label>应出勤口径</label>
           <select class="input" id="eMode">
-            <option value="auto" ${emp?.expect_mode !== 'fixed' ? 'selected' : ''}>跟随工作日历（每天 1 班）</option>
-            <option value="fixed" ${emp?.expect_mode === 'fixed' ? 'selected' : ''}>固定月度定额</option>
+            <option value="auto" ${emp?.expect_mode !== 'fixed' ? 'selected' : ''}>跟随工作日历（每天标准工时）</option>
+            <option value="fixed" ${emp?.expect_mode === 'fixed' ? 'selected' : ''}>固定月度工时定额</option>
           </select>
         </div>
+        <div class="field full" id="perDayField" style="display:${emp?.expect_mode === 'fixed' ? 'none' : 'flex'}">
+          <label>每人每天标准工时（留空 = 用全局）</label>
+          <input class="input" type="number" step="0.5" min="0.5" id="eDaily"
+                 value="${emp?.daily_hours ?? ''}" placeholder="${fmtNum(state.settings.daily_hours ?? 8)}">
+        </div>
         <div class="field full" id="quotaField" style="display:${emp?.expect_mode === 'fixed' ? 'flex' : 'none'}">
-          <label>每月应出勤班数</label>
-          <input class="input" type="number" step="0.5" id="eQuota" value="${emp?.monthly_quota ?? 26}">
+          <label>每月应出勤工时</label>
+          <input class="input" type="number" step="0.5" id="eQuota" value="${emp?.monthly_quota ?? 174}">
         </div>
         <div class="field full"><label>备注</label><input class="input" id="eNote" value="${esc(emp?.note || '')}"></div>
       </div>`,
     footer: `<button class="btn" data-close>取消</button><button class="btn primary" id="eSave">保存</button>`,
     onMount: (root, close) => {
       $('#eMode', root).addEventListener('change', (e) => {
-        $('#quotaField', root).style.display = e.target.value === 'fixed' ? 'flex' : 'none';
+        const fixed = e.target.value === 'fixed';
+        $('#quotaField', root).style.display = fixed ? 'flex' : 'none';
+        $('#perDayField', root).style.display = fixed ? 'none' : 'flex';
       });
       $('#eSave', root).addEventListener('click', async () => {
+        const perDayRaw = $('#eDaily', root).value.trim();
         const body = {
           name: $('#eName', root).value.trim(),
           employee_no: $('#eNo', root).value.trim(),
           team: $('#eTeam', root).value.trim(),
           expect_mode: $('#eMode', root).value,
           monthly_quota: $('#eMode', root).value === 'fixed' ? Number($('#eQuota', root).value) : null,
+          daily_hours: perDayRaw === '' ? null : Number(perDayRaw),
           sort_order: Number($('#eSort', root).value) || 0,
           note: $('#eNote', root).value.trim(),
         };
@@ -1711,68 +1885,6 @@ function openEmployeeModal(emp) {
           await loadBootstrap();
           renderPeople();
           toast('已保存');
-        } catch (e) { toast(e.message, true); }
-      });
-    },
-  });
-}
-
-function openShiftModal(shift) {
-  const isNew = !shift;
-  const palette = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
-  openModal({
-    title: isNew ? '新增班次' : '编辑班次',
-    body: `
-      <div class="form-grid">
-        <div class="field"><label>班次代码 *</label>
-          <input class="input" id="sCode" value="${esc(shift?.code || '')}" ${isNew ? '' : 'disabled'} placeholder="如 morning"></div>
-        <div class="field"><label>显示名称 *</label>
-          <input class="input" id="sName" value="${esc(shift?.name || '')}" placeholder="如 白班"></div>
-        <div class="field"><label>记班系数</label>
-          <input class="input" type="number" step="0.5" id="sWeight" value="${shift?.weight ?? 1}"></div>
-        <div class="field"><label>颜色</label>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            ${palette.map((c) => `<button class="btn sm" data-color="${c}" style="width:30px;height:30px;padding:0;background:${c};border-color:${shift?.color === c ? 'var(--text-primary)' : 'transparent'}"></button>`).join('')}
-          </div>
-          <input type="hidden" id="sColor" value="${esc(shift?.color || palette[0])}">
-        </div>
-      </div>`,
-    footer: `${isNew ? '' : '<button class="btn danger left" id="sDisable">停用班次</button>'}
-      <button class="btn" data-close>取消</button><button class="btn primary" id="sSave">保存</button>`,
-    onMount: (root, close) => {
-      $$('[data-color]', root).forEach((b) => b.addEventListener('click', () => {
-        $('#sColor', root).value = b.dataset.color;
-        $$('[data-color]', root).forEach((x) => x.style.borderColor = 'transparent');
-        b.style.borderColor = 'var(--text-primary)';
-      }));
-      $('#sSave', root).addEventListener('click', async () => {
-        const body = {
-          name: $('#sName', root).value.trim(),
-          weight: Number($('#sWeight', root).value) || 1,
-          color: $('#sColor', root).value,
-        };
-        if (!body.name) { toast('名称不能为空', true); return; }
-        try {
-          if (isNew) {
-            body.code = $('#sCode', root).value.trim();
-            if (!body.code) { toast('班次代码不能为空', true); return; }
-            await api('/shifts', { method: 'POST', body });
-          } else {
-            await api(`/shifts/${shift.code}`, { method: 'PUT', body });
-          }
-          close();
-          await loadBootstrap();
-          renderPeople();
-          toast('已保存');
-        } catch (e) { toast(e.message, true); }
-      });
-      $('#sDisable', root)?.addEventListener('click', async () => {
-        try {
-          await api(`/shifts/${shift.code}`, { method: 'PUT', body: { active: 0 } });
-          close();
-          await loadBootstrap();
-          renderPeople();
-          toast('已停用');
         } catch (e) { toast(e.message, true); }
       });
     },
@@ -1867,11 +1979,6 @@ function openImportWizard() {
       // ---- 步骤 2：映射
       const renderMapping = () => {
         const s = staged;
-        const shiftOpts = (selected) => `
-          <option value="${ExcelParse.AUTO_HOURS}"${selected === ExcelParse.AUTO_HOURS ? ' selected' : ''}>按工时自动折算（8 小时 = 1 班）</option>
-          ${state.shifts.map((sh) =>
-            `<option value="${esc(sh.code)}"${sh.code === selected ? ' selected' : ''}>${esc(sh.name)}${Number(sh.weight) !== 1 ? `（${fmtNum(sh.weight)} 班）` : ''}</option>`
-          ).join('')}`;
         wizBody.innerHTML = `
           <div class="summary-grid">
             <div class="summary-item"><div class="k">文件</div><div class="v" style="font-size:13px;word-break:break-all">${esc(s.filename || '—')}</div></div>
@@ -1881,18 +1988,20 @@ function openImportWizard() {
             <div class="summary-item"><div class="k">记录数</div><div class="v">${s.summary.entries}</div></div>
           </div>
 
-          <h4 style="font-size:13px;margin:0 0 4px">班次映射</h4>
+          <h4 style="font-size:13px;margin:0 0 4px">标记 → 工时</h4>
           <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px">
-            左边是 Excel 里出现的原始标记，右边选择对应的班次。选「忽略」则不导入该标记。
+            左边是 Excel 里出现的原始标记，右边填这个标记算几小时。已经能识别时间段的会按起止时间自动算出。
+            选「忽略」则不导入该标记。
           </p>
           <div id="mapList">
             ${s.tokens.map((t) => {
               const m = (s.token_meta || {})[t.token] || {};
-              const auto = typeof ExcelParse !== 'undefined' ? ExcelParse.autoShiftForToken(t.token) : null;
+              const cur = s.mapping[t.token];
+              const hh = ExcelParse.suggestedHours ? ExcelParse.suggestedHours(t.token) : 0;
               const hint = m.kind === 'work' && m.hours != null
-                ? `${fmtNum(m.hours)} 小时${auto ? ` → ${fmtNum(auto.weight)} 班` : ''}`
-                : m.kind === 'open' ? `${m.start || ''} 起到生产结束${auto ? ` → ${fmtNum(auto.weight)} 班` : ''}`
-                : m.kind === 'other' ? '未能识别时间段'
+                ? `${m.start || ''}-${m.end || ''} → ${fmtNum(m.hours)} 小时`
+                : m.kind === 'open' ? `${m.start || ''} 起到生产结束（暂按 8 小时，可改）`
+                : m.kind === 'other' ? (hh > 0 ? `按班次名估算 ${fmtNum(hh)} 小时，可改` : '未能识别，请手填工时')
                 : m.note ? m.note : '';
               return `
               <div class="map-row">
@@ -1900,10 +2009,15 @@ function openImportWizard() {
                   ${hint ? `<span class="cnt" style="color:var(--text-muted)">· ${esc(hint)}</span>` : ''}
                 </div>
                 <svg class="map-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
-                <select class="input map-select" data-token="${esc(t.token)}">
-                  <option value="__skip__">— 忽略 —</option>
-                  ${shiftOpts(s.mapping[t.token])}
-                </select>
+                <div class="map-hours">
+                  <input class="input map-hours-input" type="number" step="0.5" min="0" data-token="${esc(t.token)}"
+                         value="${cur === '__skip__' || cur === undefined ? '' : fmtNum(cur)}"
+                         placeholder="小时" ${cur === '__skip__' ? 'disabled' : ''} style="width:90px">
+                  <span class="unit">小时</span>
+                  <label class="switch" style="margin-left:8px">
+                    <input type="checkbox" class="map-skip" data-token="${esc(t.token)}" ${cur === '__skip__' ? 'checked' : ''}> 忽略
+                  </label>
+                </div>
               </div>`;
             }).join('')}
           </div>
@@ -1931,7 +2045,6 @@ function openImportWizard() {
           <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px">
             <label class="switch"><input type="checkbox" id="optReplace" checked> 覆盖这些人这些日期已有的排班</label>
             <label class="switch"><input type="checkbox" id="optAutoCreate" checked> 自动创建未匹配的人员</label>
-            <label class="switch"><input type="checkbox" id="optCreateShift"> 自动创建未映射的新班次</label>
           </div>
 
           <h4 style="font-size:13px;margin:20px 0 8px">数据预览（前 12 条）</h4>
@@ -1962,6 +2075,15 @@ function openImportWizard() {
         });
         $$('[data-imp-toggle]', wizBody).forEach((c) => c.addEventListener('change', refreshImpCount));
         refreshImpCount();
+
+        // 「忽略」勾选切换工时输入可用性
+        $$('.map-skip', wizBody).forEach((cb) => cb.addEventListener('change', () => {
+          const input = $(`.map-hours-input[data-token="${CSS.escape(cb.dataset.token)}"]`, wizBody);
+          if (input) {
+            input.disabled = cb.checked;
+            if (cb.checked) input.value = '';
+          }
+        }));
       };
 
       // 进入步骤 3 前先收集选项（renderDone 会清空 DOM）
@@ -1970,11 +2092,18 @@ function openImportWizard() {
       // ---- 步骤 3：完成
       const renderDone = async () => {
         const mapping = {};
-        $$('.map-select', wizBody).forEach((sel) => { mapping[sel.dataset.token] = sel.value; });
+        $$('.map-hours-input', wizBody).forEach((el) => {
+          const skip = $(`.map-skip[data-token="${CSS.escape(el.dataset.token)}"]`, wizBody);
+          if (skip && skip.checked) {
+            mapping[el.dataset.token] = '__skip__';
+            return;
+          }
+          const v = Number(el.value);
+          mapping[el.dataset.token] = Number.isFinite(v) && v > 0 ? v : '__skip__';
+        });
         const opts = commitOptions || {
           replace: $('#optReplace')?.checked ?? true,
           auto_create: $('#optAutoCreate')?.checked ?? true,
-          create_missing_shifts: $('#optCreateShift')?.checked ?? false,
         };
         wizBody.innerHTML = `<div style="text-align:center;padding:40px 0"><span class="spin"></span><p style="color:var(--text-muted)">正在写入…</p></div>`;
         nextBtn.disabled = true;
@@ -1990,7 +2119,7 @@ function openImportWizard() {
               </div>
               <h3 style="font-size:17px;margin-bottom:6px">导入完成</h3>
               <p style="color:var(--text-muted);font-size:13px">
-                写入 ${res.inserted} 条排班 · 新建 ${res.employees_created} 人 · 新建 ${res.shifts_created} 个班次
+                写入 ${res.inserted} 条排班 · 新建 ${res.employees_created} 人
                 ${res.deleted ? ` · 覆盖 ${res.deleted} 条旧记录` : ''}${res.skipped ? ` · 跳过 ${res.skipped} 条` : ''}
               </p>
             </div>`;
@@ -2022,7 +2151,6 @@ function openImportWizard() {
           commitOptions = {
             replace: $('#optReplace', wizBody)?.checked ?? true,
             auto_create: $('#optAutoCreate', wizBody)?.checked ?? true,
-            create_missing_shifts: $('#optCreateShift', wizBody)?.checked ?? false,
             name_map: nameMap,
           };
           setStep(2);
@@ -2075,7 +2203,6 @@ function openClearAll() {
   const empCount = state.employees.length;
   const assignCount = store.state.assignments.length;
   const adjCount = store.state.adjustments.length;
-  const shiftCount = store.state.shifts.length;
   const KEY = '清除';
 
   openModal({
@@ -2088,7 +2215,6 @@ function openClearAll() {
           · 人员 <b>${empCount}</b> 人<br>
           · 排班记录 <b>${assignCount}</b> 条<br>
           · 手工调整 <b>${adjCount}</b> 条<br>
-          · 班次设置将恢复为默认 4 个（当前 ${shiftCount} 个）<br>
           · 统计起点、工作日设置、隐藏人员等设置一并清空
         </div>
       </div>
@@ -2181,9 +2307,9 @@ function downloadBackup() {
 function exportStatsCsv() {
   if (!state.stats) return;
   const hist = !!state.stats.historical;
-  const header = ['姓名', '班组', '应出勤', hist ? '本期出勤' : '已出勤'];
-  if (hist) header.push('累计已上');
-  header.push('加班', '欠班', '净值');
+  const header = ['姓名', '班组', '应出勤(小时)', hist ? '本期出勤(小时)' : '已出勤(小时)'];
+  if (hist) header.push('累计已上(小时)');
+  header.push('加班(小时)', '欠班(小时)', '净值(小时)');
   const rows = [header];
   for (const e of state.stats.employees) {
     const row = [e.name, e.team || '', e.expected, hist ? e.period_actual : e.actual];

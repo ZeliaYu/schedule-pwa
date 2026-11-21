@@ -10,15 +10,20 @@ const DB_NAME = 'schedule-pwa';
 const DB_VERSION = 1;
 const STORE = 'state';
 
+/** 数据版本：2 起改用「工时」口径（此前为「班次 + 记班系数」） */
+const STATE_VERSION = 2;
+/** 旧数据换算工时：1 班 = 8 小时 */
+const LEGACY_HOURS_PER_SHIFT = 8;
+
 const EMPTY_STATE = () => ({
-  version: 1,
+  version: STATE_VERSION,
   employees: [],
-  shifts: [],
-  assignments: [],
-  adjustments: [],
+  assignments: [],    // { date, employee_id, start, end, hours, content }
+  adjustments: [],    // { date, employee_id, kind, amount(小时), note }
   calendarDays: {},   // "YYYY-MM-DD" -> { is_workday, note }
   settings: {
     work_weekdays: '1,2,3,4,5',   // 周一~周五（0=周日 … 6=周六）
+    daily_hours: 8,               // 每人每天标准工时，用于算应出勤
     stats_start_date: '',
     org_name: '排班管理',
   },
@@ -88,8 +93,7 @@ class Store {
     const loaded = await this.backend.load();
     this.state = migrate(loaded);
     if (!loaded) {
-      // 全新安装：建默认班次
-      this.state.shifts = DEFAULT_SHIFTS.map((s) => ({ ...s }));
+      // 全新安装：直接落盘一份空状态
       await this.save();
     }
     return this.state;
@@ -130,7 +134,6 @@ class Store {
   async reset() {
     await this.backend.clear();
     this.state = EMPTY_STATE();
-    this.state.shifts = DEFAULT_SHIFTS.map((s) => ({ ...s }));
     this.emit();
     await this.save();
     return this.state;
@@ -144,27 +147,84 @@ const DEFAULT_SHIFTS = [
   { code: 'half', name: '半班', weight: 0.5, color: '#1baf7a', sort_order: 40, active: 1 },
 ];
 
-/** 兼容旧备份：补默认字段 */
+/** 1 班 → 8 小时（仅用于把旧备份换算成工时） */
+const legacyHours = (shifts) => {
+  const map = {};
+  for (const s of shifts || []) {
+    const w = Number(s.weight);
+    map[s.code] = Number.isFinite(w) ? w * LEGACY_HOURS_PER_SHIFT : LEGACY_HOURS_PER_SHIFT;
+  }
+  return map;
+};
+
+/** 兼容旧备份：补默认字段；v1（班次）自动换算为 v2（工时） */
 function migrate(loaded) {
   const base = EMPTY_STATE();
   if (!loaded || typeof loaded !== 'object') return base;
+  const isLegacy = Number(loaded.version || 1) < STATE_VERSION;
+
   const st = {
     ...base,
     ...loaded,
+    version: STATE_VERSION,
     settings: { ...base.settings, ...(loaded.settings || {}) },
     nextIds: { ...base.nextIds, ...(loaded.nextIds || {}) },
     employees: Array.isArray(loaded.employees) ? loaded.employees : [],
-    shifts: Array.isArray(loaded.shifts) && loaded.shifts.length ? loaded.shifts : DEFAULT_SHIFTS.map((s) => ({ ...s })),
     assignments: Array.isArray(loaded.assignments) ? loaded.assignments : [],
     adjustments: Array.isArray(loaded.adjustments) ? loaded.adjustments : [],
     calendarDays: loaded.calendarDays && typeof loaded.calendarDays === 'object' ? loaded.calendarDays : {},
   };
+  delete st.shifts;   // v2 不再有班次概念（旧数据换算完后丢弃）
+
   // 统一班组/工号字段
   st.employees = st.employees.map((e) => ({
     expect_mode: 'auto', monthly_quota: null, sort_order: 0, note: '',
     employee_no: '', team: '', active: 1, ...e,
   }));
-  st.shifts = st.shifts.map((s) => ({ active: 1, ...s }));
+  st.assignments = st.assignments.map((a) => ({
+    note: '', source: 'manual', content: '', start: '', end: '', ...a,
+  }));
+  st.adjustments = st.adjustments.map((a) => ({ note: '', ...a }));
+
+  if (isLegacy) {
+    const hoursOf = legacyHours(loaded.shifts);
+    const nameOf = {};
+    for (const s of loaded.shifts || []) nameOf[s.code] = s.name;
+
+    // 排班：记班系数 × 8 小时
+    st.assignments = st.assignments.map((a) => {
+      const hours = Number.isFinite(a.hours) && a.hours > 0
+        ? a.hours
+        : (hoursOf[a.shift_code] !== undefined ? hoursOf[a.shift_code] : LEGACY_HOURS_PER_SHIFT);
+      const legacyName = nameOf[a.shift_code] || a.shift_code || '';
+      return {
+        ...a,
+        hours: Math.round(hours * 100) / 100,
+        start: a.start || '',
+        end: a.end || '',
+        content: a.content || '',
+        note: a.note || legacyName,
+      };
+    });
+    // 手工调整：班 → 小时
+    st.adjustments = st.adjustments.map((a) => ({
+      ...a,
+      amount: Math.round((Number(a.amount) || 0) * LEGACY_HOURS_PER_SHIFT * 100) / 100,
+    }));
+    // 固定月度定额：班/月 → 小时/月
+    st.employees = st.employees.map((e) => (
+      e.monthly_quota === null || e.monthly_quota === undefined || e.monthly_quota === ''
+        ? e
+        : { ...e, monthly_quota: Math.round(Number(e.monthly_quota) * LEGACY_HOURS_PER_SHIFT * 100) / 100 }
+    ));
+    if (!st.settings.daily_hours) st.settings.daily_hours = LEGACY_HOURS_PER_SHIFT;
+  }
+  st.settings.daily_hours = Number(st.settings.daily_hours) > 0
+    ? Number(st.settings.daily_hours) : LEGACY_HOURS_PER_SHIFT;
+
+  // 去掉 v1 遗留字段
+  for (const a of st.assignments) delete a.shift_code;
+
   // 修正 nextIds，防止与既有数据冲突
   const maxId = (arr) => arr.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0);
   st.nextIds.employee = Math.max(st.nextIds.employee || 1, maxId(st.employees) + 1);
@@ -175,5 +235,8 @@ function migrate(loaded) {
 
 /* 自检：Node 环境下导出，便于测试 */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { Store, MemoryBackend, EMPTY_STATE, migrate, DEFAULT_SHIFTS };
+  module.exports = {
+    Store, MemoryBackend, EMPTY_STATE, migrate, DEFAULT_SHIFTS,
+    STATE_VERSION, LEGACY_HOURS_PER_SHIFT,
+  };
 }

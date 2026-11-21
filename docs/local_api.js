@@ -2,6 +2,7 @@
    本地 API 层
    与 FastAPI 后端接口同形，把请求转成本地状态读写。
    这样界面代码不需要关心数据存在哪里。
+   v2：班次概念取消，排班直接记「工时」（hours）与可选时间段/工作内容。
    =================================================================== */
 'use strict';
 
@@ -15,12 +16,17 @@
     const Stats = root.Stats;
     const Importer = root.Importer;
 
-    const activeShifts = () => (store.state.shifts || [])
-      .filter((s) => s.active !== 0)
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    const allShifts = () => (store.state.shifts || [])
-      .slice()
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    const err = (msg) => { throw new Error(msg); };
+
+    /** 一条排班的工时：显式 hours 优先，否则按起止时间推算，最后退回日标准工时 */
+    const slotHours = (src) => {
+      const h = Number(src && src.hours);
+      if (Number.isFinite(h) && h > 0) return Math.round(h * 100) / 100;
+      const byTime = Stats.hoursBetween(src && src.start, src && src.end);
+      if (byTime > 0) return byTime;
+      return Number(store.state.settings.daily_hours) || Stats.DEFAULT_DAILY_HOURS;
+    };
+
     const activeEmps = () => (store.state.employees || [])
       .filter((e) => e.active !== 0)
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
@@ -30,7 +36,23 @@
       return activeEmps().map((e) => ({ ...e, hidden: hidden.has(e.id) }));
     };
 
-    const err = (msg) => { throw new Error(msg); };
+    const slotOf = (body) => ({
+      start: String((body && body.start) || '').trim(),
+      end: String((body && body.end) || '').trim(),
+      hours: slotHours(body),
+      content: String((body && body.content) || '').trim(),
+    });
+
+    const publicSlot = (a) => {
+      const e = store.state.employees.find((x) => x.id === a.employee_id);
+      return {
+        id: a.id, date: a.date, employee_id: a.employee_id,
+        start: a.start || '', end: a.end || '',
+        hours: Stats.assignmentHours(a),
+        content: a.content || '', note: a.note || '',
+        source: a.source || 'manual', name: e ? e.name : '',
+      };
+    };
 
     async function handle(path, opts) {
       opts = opts || {};
@@ -42,7 +64,6 @@
       if (route === '/bootstrap') {
         return {
           employees: allActiveEmps(),
-          shifts: activeShifts(),
           settings: { ...store.state.settings },
           storage: { local: true },
         };
@@ -70,6 +91,7 @@
               team: (body.team || '').trim(),
               expect_mode: body.expect_mode || 'auto',
               monthly_quota: body.monthly_quota === undefined ? null : body.monthly_quota,
+              daily_hours: Number(body.daily_hours) > 0 ? Number(body.daily_hours) : null,
               active: 1,
               sort_order: Number(body.sort_order) || 0,
               note: (body.note || '').trim(),
@@ -93,7 +115,7 @@
             if (dup) err('该姓名已存在');
           }
           return store.mutate(() => {
-            for (const k of ['name', 'employee_no', 'team', 'expect_mode', 'monthly_quota', 'active', 'sort_order', 'note']) {
+            for (const k of ['name', 'employee_no', 'team', 'expect_mode', 'monthly_quota', 'daily_hours', 'active', 'sort_order', 'note']) {
               if (k in body) emp[k] = body[k];
             }
             return JSON.parse(JSON.stringify(emp));
@@ -114,69 +136,37 @@
         }
       }
 
-      /* ---------------------------------------------------- 班次 */
-      if (route === '/shifts') {
-        if (method === 'POST') {
-          const code = String((body && body.code) || '').trim();
-          const name = String((body && body.name) || '').trim();
-          if (!code || !name) err('班次代码和名称不能为空');
-          if (store.state.shifts.some((s) => s.code === code)) err(`班次代码「${code}」已存在`);
-          await store.mutate((st) => {
-            st.shifts.push({
-              code, name,
-              weight: Number(body.weight) || 1,
-              color: body.color || '#2a78d6',
-              sort_order: Number(body.sort_order) || 100,
-              active: 1,
-            });
-          });
-          return JSON.parse(JSON.stringify(allShifts()));
-        }
-        if (q.include_inactive) return JSON.parse(JSON.stringify(allShifts()));
-        return JSON.parse(JSON.stringify(activeShifts()));
-      }
-      const shiftMatch = /^\/shifts\/([^/]+)$/.exec(route);
-      if (shiftMatch) {
-        const code = decodeURIComponent(shiftMatch[1]);
-        const shift = store.state.shifts.find((s) => s.code === code);
-        if (!shift) err('班次不存在');
-        if (method === 'PUT') {
-          return store.mutate(() => {
-            for (const k of ['name', 'weight', 'color', 'sort_order', 'active']) {
-              if (k in body) shift[k] = k === 'weight' ? Number(body[k]) : body[k];
-            }
-            return JSON.parse(JSON.stringify(shift));
-          });
-        }
-      }
-
-      /* ---------------------------------------------------- 排班 */
+      /* ---------------------------------------------------- 排班（按工时） */
       if (route === '/schedule') {
         if (method === 'GET') {
           const from = q.date_from, to = q.date_to;
           const rows = store.state.assignments
             .filter((a) => a.date >= from && a.date <= to)
-            .map((a) => {
-              const e = store.state.employees.find((x) => x.id === a.employee_id);
-              return {
-                id: a.id, date: a.date, employee_id: a.employee_id,
-                shift_code: a.shift_code, note: a.note || '',
-                source: a.source || 'manual', name: e ? e.name : '',
-              };
-            });
+            .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.start || '').localeCompare(b.start || '')))
+            .map(publicSlot);
           return { from, to, assignments: rows, settings: { ...store.state.settings } };
         }
         if (method === 'POST') {
-          const { date, employee_id, shift_code, note = '', source = 'manual' } = body || {};
-          if (!date || !employee_id || !shift_code) err('需要 employee_id 和 shift_code');
+          const { date, employee_id } = body || {};
+          if (!date || !employee_id) err('需要 date 和 employee_id');
+          const slot = slotOf(body);
+          if (!(slot.hours > 0)) err('工时需大于 0');
           return store.mutate((st) => {
-            let row = st.assignments.find((a) => a.date === date && a.employee_id === Number(employee_id) && a.shift_code === shift_code);
+            // 同一天同一人同一时间段视为同一格，重复提交则覆盖
+            let row = st.assignments.find((a) =>
+              a.date === date && a.employee_id === Number(employee_id) &&
+              (a.start || '') === slot.start && (a.end || '') === slot.end);
             if (row) {
-              row.note = note;
+              row.hours = slot.hours;
+              row.content = slot.content;
+              row.note = String((body && body.note) || '');
             } else {
               row = {
                 id: Importer.nextId(st, 'assignment'),
-                date, employee_id: Number(employee_id), shift_code, note, source,
+                date, employee_id: Number(employee_id),
+                start: slot.start, end: slot.end, hours: slot.hours,
+                content: slot.content, note: String((body && body.note) || ''),
+                source: (body && body.source) || 'manual',
               };
               st.assignments.push(row);
             }
@@ -184,19 +174,48 @@
           });
         }
         if (method === 'DELETE') {
-          const { date, employee_id, shift_code } = q;
+          const { date, employee_id, id, start } = q;
           return store.mutate((st) => {
-            st.assignments = st.assignments.filter((a) =>
-              !(a.date === date && a.employee_id === Number(employee_id) &&
-                (!shift_code || a.shift_code === shift_code)));
+            st.assignments = st.assignments.filter((a) => {
+              if (date && a.date !== date) return true;
+              if (employee_id && a.employee_id !== Number(employee_id)) return true;
+              if (id && a.id !== Number(id)) return true;
+              if (start !== undefined && (a.start || '') !== start) return true;
+              return false;
+            });
+            return { ok: true };
+          });
+        }
+      }
+      const slotMatch = /^\/schedule\/(\d+)$/.exec(route);
+      if (slotMatch) {
+        const id = Number(slotMatch[1]);
+        const row = store.state.assignments.find((a) => a.id === id);
+        if (!row) err('排班记录不存在');
+        if (method === 'PUT') {
+          const slot = slotOf({ ...row, ...(body || {}) });
+          if (!(slot.hours > 0)) err('工时需大于 0');
+          return store.mutate(() => {
+            row.start = slot.start;
+            row.end = slot.end;
+            row.hours = slot.hours;
+            row.content = slot.content;
+            if (body && 'note' in body) row.note = String(body.note || '');
+            return publicSlot(row);
+          });
+        }
+        if (method === 'DELETE') {
+          return store.mutate((st) => {
+            st.assignments = st.assignments.filter((a) => a.id !== id);
             return { ok: true };
           });
         }
       }
       if (route === '/schedule/bulk') {
-        const { action = 'set', dates = [], employee_ids = [], shift_code, note = '', replace = true } = body || {};
+        const { action = 'set', dates = [], employee_ids = [], hours, start = '', end = '', content = '' } = body || {};
         if (!dates.length || !employee_ids.length) err('需要 dates 和 employee_ids');
-        if (action === 'set' && !shift_code) err('设置排班需要 shift_code');
+        const h = Number(hours) > 0 ? Number(hours) : Stats.hoursBetween(start, end);
+        if (action === 'set' && !(h > 0)) err('设置排班需要工时');
         return store.mutate((st) => {
           let changed = 0;
           for (const d of dates) {
@@ -208,15 +227,12 @@
                 changed += before - st.assignments.length;
                 continue;
               }
-              if (replace) {
-                st.assignments = st.assignments.filter((a) => !(a.date === d && a.employee_id === id));
-              }
-              if (!st.assignments.some((a) => a.date === d && a.employee_id === id && a.shift_code === shift_code)) {
-                st.assignments.push({
-                  id: Importer.nextId(st, 'assignment'),
-                  date: d, employee_id: id, shift_code, note, source: 'manual',
-                });
-              }
+              st.assignments.push({
+                id: Importer.nextId(st, 'assignment'),
+                date: d, employee_id: id,
+                start, end, hours: Math.round(h * 100) / 100, content,
+                note: '', source: 'manual',
+              });
               changed++;
             }
           }

@@ -32,7 +32,6 @@ const stats = Importer.commitSync(state, staged, {
   mapping: staged.mapping,
   replace: true,
   auto_create: true,
-  create_missing_shifts: false,
 });
 
 console.log('解析:', staged.summary);

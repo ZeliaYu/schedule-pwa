@@ -33,6 +33,11 @@
     1.5: { code: 'long15', name: '一点五班', color: '#eda100' },
     2.0: { code: 'double', name: '连班', color: '#4a3aa7' },
   };
+  /** 只写了班次名、没写时间段时，按常识折算的工时 */
+  const NAME_HOURS = {
+    白班: 8, 早班: 8, 中班: 8, 晚班: 8, 夜班: 8, 日班: 8, 常白班: 8, 正常班: 8,
+    半班: 4, 半天: 4, 连班: 16, 双班: 16, 一点五班: 12, 加班: 8, 值班: 8,
+  };
 
   // ------------------------------------------------------------ 基础工具
   function clean(v) {
@@ -98,27 +103,28 @@
       .replace(/~/g, '-').replace(/至/g, '-').replace(/[\s　]/g, '').replace(/\n/g, '');
     t = t.replace(/-+$/, '');
     if (['', '/', '\\', '-', '休', '休息', '公休', '例休', '空白'].includes(t)) {
-      return { kind: 'rest', hours: 0, start: null, label: raw };
+      return { kind: 'rest', hours: 0, start: null, end: null, label: raw };
     }
     for (const w of ['请假', '调休', '年假', '事假', '病假', '退休', '外出', '出差', '旷工']) {
-      if (t.includes(w)) return { kind: 'rest', hours: 0, start: null, label: raw, note: w };
+      if (t.includes(w)) return { kind: 'rest', hours: 0, start: null, end: null, label: raw, note: w };
     }
     const m = TIME_RANGE_RE.exec(t);
     if (m) {
       const start = `${String(+m[1]).padStart(2, '0')}:${m[2]}`;
       const endRaw = m[3];
       if (OPEN_END_WORDS.some((w) => endRaw.includes(w))) {
-        return { kind: 'open', hours: null, start, label: raw };
+        return { kind: 'open', hours: null, start, end: '', label: raw };
       }
       const m2 = /^(\d{1,2}):(\d{2})/.exec(endRaw);
       if (m2) {
         let a = +m[1] * 60 + +m[2];
         let b = +m2[1] * 60 + +m2[2];
         if (b <= a) b += 24 * 60;
-        return { kind: 'work', hours: Math.round((b - a) / 60 * 100) / 100, start, label: raw };
+        const end = `${String(+m2[1]).padStart(2, '0')}:${m2[2]}`;
+        return { kind: 'work', hours: Math.round((b - a) / 60 * 100) / 100, start, end, label: raw };
       }
     }
-    return { kind: 'other', hours: null, start: null, label: raw };
+    return { kind: 'other', hours: null, start: null, end: null, label: raw };
   }
 
   /** 按工时折算班次：8 小时 = 1 班，四舍五入到 0.5 班 */
@@ -134,11 +140,30 @@
     return { code: 'w' + String(weight).replace('.', '_'), name: `${weight}班`, weight, color: '#898781' };
   }
 
+  /** 标记 → 建议工时；算不出时间段时按班次名估；完全认不出返回 0 */
+  function suggestedHours(token) {
+    const info = parseTimeToken(token);
+    if (info.kind === 'work' && info.hours > 0) return info.hours;
+    if (info.kind === 'open') return HOURS_PER_SHIFT;
+    const t = String(token || '').replace(/[\s　]/g, '');
+    if (NAME_HOURS[t]) return NAME_HOURS[t];
+    for (const [name, h] of Object.entries(NAME_HOURS)) {
+      if (t.includes(name)) return h;
+    }
+    // 「夜班2」「白班×2」这类倍数写法
+    const mult = /[×xX*]\s*(\d+(?:\.\d+)?)/.exec(t);
+    if (mult) {
+      const base = suggestedHours(t.replace(/[×xX*].*$/, ''));
+      if (base > 0) return Math.min(base * Number(mult[1]), 24);
+    }
+    return 0;
+  }
+
   function tokenMeta(tokens) {
     const out = {};
     for (const t of tokens) {
       const i = parseTimeToken(t);
-      out[t] = { kind: i.kind, hours: i.hours, start: i.start, note: i.note || '' };
+      out[t] = { kind: i.kind, hours: i.hours, start: i.start, end: i.end, note: i.note || '' };
     }
     return out;
   }
@@ -448,7 +473,7 @@
 
   const api = {
     parseWorkbook, parseTimeToken, autoShiftForToken, tokenMeta, suggestMapping,
-    isRest, splitTokens, clean, AUTO_HOURS, HOURS_PER_SHIFT, WEIGHT_SHIFT_NAMES,
+    suggestedHours, isRest, splitTokens, clean, AUTO_HOURS, HOURS_PER_SHIFT, NAME_HOURS, WEIGHT_SHIFT_NAMES,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

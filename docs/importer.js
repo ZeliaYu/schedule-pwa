@@ -1,12 +1,19 @@
 /* ===================================================================
    导入 / 备份 / 恢复（浏览器端）
+   班次概念已取消：Excel 里的每个标记折算成「工时」，可逐项修正。
    =================================================================== */
 'use strict';
 
 (function (root) {
   // 浏览器用全局对象，Node 测试里用 require
   const ids = () => (root.ExcelParse || (typeof require === 'function' ? require('./excel_parse.js') : null));
-  const todayISO = () => {
+  const hoursOf = (token) => {
+    const EP = ids();
+    if (EP.suggestedHours) return EP.suggestedHours(token);
+    const info = EP.parseTimeToken(token);
+    return Number.isFinite(info.hours) && info.hours > 0 ? info.hours : 0;
+  };
+  const toISOToday = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
@@ -18,13 +25,24 @@
     return v;
   }
 
-  /** 预览：解析 + 人员匹配情况 */
+  /**
+   * 预览：解析 + 人员匹配情况
+   * 每个原始标记给出建议工时（算不出时间段的为 0，需手动填）
+   */
   function preview(state, buffer, filename) {
     const EP = ids();
     const parsed = EP.parseWorkbook(buffer, filename);
     const tokens = parsed.tokens.map((t) => t.token);
-    const mapping = EP.suggestMapping(tokens, state.shifts.filter((s) => s.active !== 0));
     const meta = EP.tokenMeta(tokens);
+    const suggest = {};
+    for (const t of tokens) {
+      const info = meta[t] || {};
+      if (info.kind === 'rest') suggest[t] = '__skip__';
+      else {
+        const h = EP.suggestedHours ? EP.suggestedHours(t) : 0;
+        suggest[t] = h > 0 ? h : 0;   // 0 = 认不出，需要用户填
+      }
+    }
 
     const byName = new Map();
     const byNo = new Map();
@@ -50,7 +68,7 @@
       },
       tokens: parsed.tokens,
       token_meta: meta,
-      mapping,
+      mapping: suggest,
       names,
       preview: parsed.preview,
       _entries: parsed.entries,
@@ -58,48 +76,32 @@
   }
 
   /**
-   * 提交导入
-   * opts: { mapping, replace, auto_create, create_missing_shifts, name_map }
+   * 同步提交（本地 API 在 mutate 内调用；不等待落盘）
+   * opts: { mapping, replace, auto_create, name_map }
+   *   mapping[原始标记] = 工时数字 | '__skip__'
    */
-  /** 同步提交（本地 API 在 mutate 内调用；不等待落盘） */
   function commitSync(state, staged, opts) {
-    const EP = ids();
     const mapping = { ...(opts.mapping || {}) };
     const stats = {
-      inserted: 0, skipped: 0, employees_created: 0, shifts_created: 0, deleted: 0,
+      inserted: 0, skipped: 0, employees_created: 0, deleted: 0,
     };
 
-    // 1) 时间段标记 -> 按工时折算的新班次
-    const tokenShift = {};
-    for (const [raw, code] of Object.entries(mapping)) {
-      if (code !== EP.AUTO_HOURS) continue;
-      const spec = EP.autoShiftForToken(raw);
-      if (!spec) { mapping[raw] = '__skip__'; continue; }
-      tokenShift[raw] = spec.code;
-      if (!state.shifts.some((s) => s.code === spec.code)) {
-        state.shifts.push({
-          code: spec.code, name: spec.name, weight: spec.weight, color: spec.color,
-          sort_order: 60 + Math.round(spec.weight * 10), active: 1,
-        });
-        stats.shifts_created++;
-      }
-    }
-    for (const [raw, code] of Object.entries(tokenShift)) mapping[raw] = code;
+    const resolveHours = (raw, entry) => {
+      const v = mapping[raw];
+      if (v === '__skip__' || v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) return Math.round(n * 100) / 100;
+      // 映射没填时，退回按时间段/班次名自动折算
+      const auto = hoursOf(raw);
+      return auto > 0 ? auto : null;
+    };
 
-    // 2) 未映射但勾选自动创建 -> 用原始标记当名称
-    for (const [raw, code] of Object.entries(mapping)) {
-      if (code === '__skip__' || code === null || code === EP.AUTO_HOURS) continue;
-      if (state.shifts.some((s) => s.code === code)) continue;
-      if (!opts.create_missing_shifts) {
-        throw new Error(`班次代码「${code}」不存在，请先创建或勾选自动创建`);
-      }
-      state.shifts.push({
-        code, name: raw, weight: 1, color: '#898781', sort_order: 500, active: 1,
-      });
-      stats.shifts_created++;
-    }
+    const stepOf = (raw) => {
+      const info = ids().parseTimeToken(raw);
+      return { start: info.start || '', end: info.end || '' };
+    };
 
-    // 3) 人员解析
+    // 人员解析
     const empsByName = new Map();
     const empsByNo = new Map();
     for (const e of state.employees) {
@@ -138,11 +140,10 @@
       return emp.id;
     };
 
-    // 4) 先确定将被覆盖的 (日期, 人员)
+    // 先确定将被覆盖的 (日期, 人员)
     const touched = new Set();
     for (const e of staged._entries) {
-      const code = mapping[e.raw];
-      if (code === null || code === undefined || code === '__skip__') continue;
+      if (resolveHours(e.raw, e) === null) continue;
       const eid = resolveEmployee(e.name, e.employee_no || '', e.team || '');
       if (eid === null) continue;
       touched.add(`${e.date}|${eid}`);
@@ -154,21 +155,21 @@
       stats.deleted = before - state.assignments.length;
     }
 
-    // 5) 写入
-    const exists = new Set(state.assignments.map((a) => `${a.date}|${a.employee_id}|${a.shift_code}`));
+    // 写入
     for (const e of staged._entries) {
-      const code = mapping[e.raw];
-      if (code === null || code === undefined || code === '__skip__') { stats.skipped++; continue; }
+      const hours = resolveHours(e.raw, e);
+      if (hours === null) { stats.skipped++; continue; }
       const eid = resolveEmployee(e.name, e.employee_no || '', e.team || '');
       if (eid === null) { stats.skipped++; continue; }
-      const key = `${e.date}|${eid}|${code}`;
-      if (exists.has(key)) { stats.skipped++; continue; }
-      exists.add(key);
+      const step = stepOf(e.raw);
       state.assignments.push({
         id: nextId(state, 'assignment'),
         date: e.date,
         employee_id: eid,
-        shift_code: code,
+        start: step.start,
+        end: step.end,
+        hours,
+        content: e.note || '',
         note: '',
         source: 'import',
       });
@@ -182,9 +183,8 @@
   function exportBackup(state) {
     return JSON.stringify({
       exported_at: new Date().toISOString().slice(0, 19),
-      version: 1,
+      version: state.version || 2,
       employees: state.employees,
-      shifts: state.shifts,
       assignments: state.assignments,
       adjustments: state.adjustments,
       calendarDays: state.calendarDays,
@@ -216,7 +216,10 @@
     return '﻿' + rows.map((r) => r.map(esc).join(',')).join('\r\n');
   }
 
-  const api = { preview, commit: commitSync, commitSync, exportBackup, importBackup, toCsv, todayISO, nextId };
+  const api = {
+    preview, commit: commitSync, commitSync, exportBackup, importBackup, toCsv,
+    todayISO: toISOToday, nextId,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Importer = api;
 })(typeof self !== 'undefined' ? self : this);

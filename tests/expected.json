@@ -1,1 +1,1050 @@
-{"nov": {"range": {"from": "2026-11-01", "to": "2026-11-30"}, "counted_from": "2026-11-01", "historical": false, "workdays": 11, "days": [{"date": "2026-11-01", "is_workday": false}, {"date": "2026-11-02", "is_workday": true}, {"date": "2026-11-03", "is_workday": true}, {"date": "2026-11-04", "is_workday": true}, {"date": "2026-11-05", "is_workday": true}, {"date": "2026-11-06", "is_workday": true}, {"date": "2026-11-07", "is_workday": false}, {"date": "2026-11-08", "is_workday": false}, {"date": "2026-11-09", "is_workday": true}, {"date": "2026-11-10", "is_workday": false}, {"date": "2026-11-11", "is_workday": true}, {"date": "2026-11-12", "is_workday": true}, {"date": "2026-11-13", "is_workday": true}, {"date": "2026-11-14", "is_workday": false}, {"date": "2026-11-15", "is_workday": false}, {"date": "2026-11-16", "is_workday": true}, {"date": "2026-11-17", "is_workday": true}, {"date": "2026-11-18", "is_workday": true}, {"date": "2026-11-19", "is_workday": true}, {"date": "2026-11-20", "is_workday": true}, {"date": "2026-11-21", "is_workday": false}, {"date": "2026-11-22", "is_workday": false}, {"date": "2026-11-23", "is_workday": true}, {"date": "2026-11-24", "is_workday": true}, {"date": "2026-11-25", "is_workday": true}, {"date": "2026-11-26", "is_workday": true}, {"date": "2026-11-27", "is_workday": true}, {"date": "2026-11-28", "is_workday": false}, {"date": "2026-11-29", "is_workday": false}, {"date": "2026-11-30", "is_workday": true}], "employees": [{"employee_id": 1, "name": "甲", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 11.0, "actual": 20.0, "period_actual": 14.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 14.0, "manual_attend": 0.0, "worked_days": 22, "net": 3.0, "net_final": 11.0, "auto_overtime": 9.0, "auto_owe": 0.0, "manual_overtime": 2.0, "manual_owe": 0.0, "overtime": 11.0, "owe": 0, "by_shift": {"morning": 9.0, "night": 6.0, "evening": 3.0, "half": 2.0}, "adjustments": [{"id": 3, "date": "2026-11-05", "kind": "overtime", "amount": 2.0, "note": ""}], "rest_overtime": 6.0, "rest_days": 7}, {"employee_id": 2, "name": "乙", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 11.0, "actual": 17.5, "period_actual": 12.5, "historical_actual": 0.0, "historical_days": 0, "scheduled": 12.5, "manual_attend": 0.0, "worked_days": 19, "net": 1.5, "net_final": 5.0, "auto_overtime": 6.5, "auto_owe": 0.0, "manual_overtime": 0.0, "manual_owe": 1.5, "overtime": 5.0, "owe": 0, "by_shift": {"evening": 8.0, "morning": 4.0, "half": 1.5, "night": 4.0}, "adjustments": [{"id": 2, "date": "2026-11-06", "kind": "owe", "amount": -1.5, "note": ""}], "rest_overtime": 5.0, "rest_days": 6}, {"employee_id": 3, "name": "丙", "employee_no": "", "team": "二班", "expect_mode": "auto", "expected": 11.0, "actual": 20.5, "period_actual": 15.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 14.0, "manual_attend": 1.0, "worked_days": 22, "net": 4.0, "net_final": 9.5, "auto_overtime": 9.5, "auto_owe": 0.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 9.5, "owe": 0, "by_shift": {"morning": 7.0, "evening": 5.0, "night": 5.0, "half": 2.5}, "adjustments": [{"id": 1, "date": "2026-11-07", "kind": "attend", "amount": 1.0, "note": ""}], "rest_overtime": 5.5, "rest_days": 6}, {"employee_id": 4, "name": "丁", "employee_no": "", "team": "二班", "expect_mode": "fixed", "expected": 20.0, "actual": 16.0, "period_actual": 11.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 11.0, "manual_attend": 0.0, "worked_days": 19, "net": -9.0, "net_final": -4.0, "auto_overtime": 0.0, "auto_owe": 4.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 4.0, "by_shift": {"morning": 7.0, "half": 3.0, "night": 3.0, "evening": 3.0}, "adjustments": [], "rest_overtime": 5.0, "rest_days": 5}], "totals": {"expected": 53.0, "actual": 74.0, "period_actual": 52.5, "historical_actual": 0.0, "overtime": 25.5, "owe": 4.0, "people": 4, "workdays": 11}, "shifts": {"morning": {"code": "morning", "name": "白班", "weight": 1.0, "color": "#2a78d6", "sort_order": 10, "active": 1}, "evening": {"code": "evening", "name": "中班", "weight": 1.0, "color": "#eb6834", "sort_order": 20, "active": 1}, "night": {"code": "night", "name": "夜班", "weight": 1.0, "color": "#4a3aa7", "sort_order": 30, "active": 1}, "half": {"code": "half", "name": "半班", "weight": 0.5, "color": "#1baf7a", "sort_order": 40, "active": 1}}}, "mid": {"range": {"from": "2026-11-05", "to": "2026-11-20"}, "counted_from": "2026-11-05", "historical": false, "workdays": 8, "days": [{"date": "2026-11-05", "is_workday": true}, {"date": "2026-11-06", "is_workday": true}, {"date": "2026-11-07", "is_workday": false}, {"date": "2026-11-08", "is_workday": false}, {"date": "2026-11-09", "is_workday": true}, {"date": "2026-11-10", "is_workday": false}, {"date": "2026-11-11", "is_workday": true}, {"date": "2026-11-12", "is_workday": true}, {"date": "2026-11-13", "is_workday": true}, {"date": "2026-11-14", "is_workday": false}, {"date": "2026-11-15", "is_workday": false}, {"date": "2026-11-16", "is_workday": true}, {"date": "2026-11-17", "is_workday": true}, {"date": "2026-11-18", "is_workday": true}, {"date": "2026-11-19", "is_workday": true}, {"date": "2026-11-20", "is_workday": true}], "employees": [{"employee_id": 1, "name": "甲", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 8.0, "actual": 9.5, "period_actual": 6.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 6.0, "manual_attend": 0.0, "worked_days": 11, "net": -2.0, "net_final": 3.5, "auto_overtime": 1.5, "auto_owe": 0.0, "manual_overtime": 2.0, "manual_owe": 0.0, "overtime": 3.5, "owe": 0, "by_shift": {"night": 4.0, "evening": 1.0, "half": 1.5, "morning": 3.0}, "adjustments": [{"id": 3, "date": "2026-11-05", "kind": "overtime", "amount": 2.0, "note": ""}], "rest_overtime": 3.5, "rest_days": 4}, {"employee_id": 2, "name": "乙", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 8.0, "actual": 10.0, "period_actual": 8.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 8.0, "manual_attend": 0.0, "worked_days": 11, "net": 0.0, "net_final": 0.5, "auto_overtime": 2.0, "auto_owe": 0.0, "manual_overtime": 0.0, "manual_owe": 1.5, "overtime": 0.5, "owe": 0, "by_shift": {"morning": 4.0, "half": 1.0, "evening": 4.0, "night": 1.0}, "adjustments": [{"id": 2, "date": "2026-11-06", "kind": "owe", "amount": -1.5, "note": ""}], "rest_overtime": 2.0, "rest_days": 3}, {"employee_id": 3, "name": "丙", "employee_no": "", "team": "二班", "expect_mode": "auto", "expected": 8.0, "actual": 12.5, "period_actual": 8.5, "historical_actual": 0.0, "historical_days": 0, "scheduled": 7.5, "manual_attend": 1.0, "worked_days": 12, "net": 0.5, "net_final": 4.5, "auto_overtime": 4.5, "auto_owe": 0.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 4.5, "owe": 0, "by_shift": {"morning": 3.0, "night": 5.0, "evening": 3.0, "half": 0.5}, "adjustments": [{"id": 1, "date": "2026-11-07", "kind": "attend", "amount": 1.0, "note": ""}], "rest_overtime": 4.0, "rest_days": 4}, {"employee_id": 4, "name": "丁", "employee_no": "", "team": "二班", "expect_mode": "fixed", "expected": 20.0, "actual": 9.0, "period_actual": 6.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 6.0, "manual_attend": 0.0, "worked_days": 11, "net": -14.0, "net_final": -11.0, "auto_overtime": 0.0, "auto_owe": 11.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 11.0, "by_shift": {"morning": 5.0, "night": 1.0, "evening": 1.0, "half": 2.0}, "adjustments": [], "rest_overtime": 3.0, "rest_days": 3}], "totals": {"expected": 44.0, "actual": 41.0, "period_actual": 28.5, "historical_actual": 0.0, "overtime": 8.5, "owe": 11.0, "people": 4, "workdays": 8}, "shifts": {"morning": {"code": "morning", "name": "白班", "weight": 1.0, "color": "#2a78d6", "sort_order": 10, "active": 1}, "evening": {"code": "evening", "name": "中班", "weight": 1.0, "color": "#eb6834", "sort_order": 20, "active": 1}, "night": {"code": "night", "name": "夜班", "weight": 1.0, "color": "#4a3aa7", "sort_order": 30, "active": 1}, "half": {"code": "half", "name": "半班", "weight": 0.5, "color": "#1baf7a", "sort_order": 40, "active": 1}}}, "q4": {"range": {"from": "2026-10-01", "to": "2026-12-31"}, "counted_from": "2026-10-01", "historical": false, "workdays": 33, "days": [{"date": "2026-10-01", "is_workday": true}, {"date": "2026-10-02", "is_workday": true}, {"date": "2026-10-03", "is_workday": false}, {"date": "2026-10-04", "is_workday": false}, {"date": "2026-10-05", "is_workday": true}, {"date": "2026-10-06", "is_workday": true}, {"date": "2026-10-07", "is_workday": true}, {"date": "2026-10-08", "is_workday": true}, {"date": "2026-10-09", "is_workday": true}, {"date": "2026-10-10", "is_workday": false}, {"date": "2026-10-11", "is_workday": false}, {"date": "2026-10-12", "is_workday": true}, {"date": "2026-10-13", "is_workday": true}, {"date": "2026-10-14", "is_workday": true}, {"date": "2026-10-15", "is_workday": true}, {"date": "2026-10-16", "is_workday": true}, {"date": "2026-10-17", "is_workday": false}, {"date": "2026-10-18", "is_workday": false}, {"date": "2026-10-19", "is_workday": true}, {"date": "2026-10-20", "is_workday": true}, {"date": "2026-10-21", "is_workday": true}, {"date": "2026-10-22", "is_workday": true}, {"date": "2026-10-23", "is_workday": true}, {"date": "2026-10-24", "is_workday": false}, {"date": "2026-10-25", "is_workday": false}, {"date": "2026-10-26", "is_workday": true}, {"date": "2026-10-27", "is_workday": true}, {"date": "2026-10-28", "is_workday": true}, {"date": "2026-10-29", "is_workday": true}, {"date": "2026-10-30", "is_workday": true}, {"date": "2026-10-31", "is_workday": false}, {"date": "2026-11-01", "is_workday": false}, {"date": "2026-11-02", "is_workday": true}, {"date": "2026-11-03", "is_workday": true}, {"date": "2026-11-04", "is_workday": true}, {"date": "2026-11-05", "is_workday": true}, {"date": "2026-11-06", "is_workday": true}, {"date": "2026-11-07", "is_workday": false}, {"date": "2026-11-08", "is_workday": false}, {"date": "2026-11-09", "is_workday": true}, {"date": "2026-11-10", "is_workday": false}, {"date": "2026-11-11", "is_workday": true}, {"date": "2026-11-12", "is_workday": true}, {"date": "2026-11-13", "is_workday": true}, {"date": "2026-11-14", "is_workday": false}, {"date": "2026-11-15", "is_workday": false}, {"date": "2026-11-16", "is_workday": true}, {"date": "2026-11-17", "is_workday": true}, {"date": "2026-11-18", "is_workday": true}, {"date": "2026-11-19", "is_workday": true}, {"date": "2026-11-20", "is_workday": true}, {"date": "2026-11-21", "is_workday": false}, {"date": "2026-11-22", "is_workday": false}, {"date": "2026-11-23", "is_workday": true}, {"date": "2026-11-24", "is_workday": true}, {"date": "2026-11-25", "is_workday": true}, {"date": "2026-11-26", "is_workday": true}, {"date": "2026-11-27", "is_workday": true}, {"date": "2026-11-28", "is_workday": false}, {"date": "2026-11-29", "is_workday": false}, {"date": "2026-11-30", "is_workday": true}, {"date": "2026-12-01", "is_workday": true}, {"date": "2026-12-02", "is_workday": true}, {"date": "2026-12-03", "is_workday": true}, {"date": "2026-12-04", "is_workday": true}, {"date": "2026-12-05", "is_workday": false}, {"date": "2026-12-06", "is_workday": false}, {"date": "2026-12-07", "is_workday": true}, {"date": "2026-12-08", "is_workday": true}, {"date": "2026-12-09", "is_workday": true}, {"date": "2026-12-10", "is_workday": true}, {"date": "2026-12-11", "is_workday": true}, {"date": "2026-12-12", "is_workday": false}, {"date": "2026-12-13", "is_workday": false}, {"date": "2026-12-14", "is_workday": true}, {"date": "2026-12-15", "is_workday": true}, {"date": "2026-12-16", "is_workday": true}, {"date": "2026-12-17", "is_workday": true}, {"date": "2026-12-18", "is_workday": true}, {"date": "2026-12-19", "is_workday": false}, {"date": "2026-12-20", "is_workday": false}, {"date": "2026-12-21", "is_workday": true}, {"date": "2026-12-22", "is_workday": true}, {"date": "2026-12-23", "is_workday": true}, {"date": "2026-12-24", "is_workday": true}, {"date": "2026-12-25", "is_workday": true}, {"date": "2026-12-26", "is_workday": false}, {"date": "2026-12-27", "is_workday": false}, {"date": "2026-12-28", "is_workday": true}, {"date": "2026-12-29", "is_workday": true}, {"date": "2026-12-30", "is_workday": true}, {"date": "2026-12-31", "is_workday": true}], "employees": [{"employee_id": 1, "name": "甲", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 33.0, "actual": 20.0, "period_actual": 14.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 14.0, "manual_attend": 0.0, "worked_days": 22, "net": -19.0, "net_final": -11.0, "auto_overtime": 0.0, "auto_owe": 13.0, "manual_overtime": 2.0, "manual_owe": 0.0, "overtime": 0, "owe": 11.0, "by_shift": {"morning": 9.0, "night": 6.0, "evening": 3.0, "half": 2.0}, "adjustments": [{"id": 3, "date": "2026-11-05", "kind": "overtime", "amount": 2.0, "note": ""}], "rest_overtime": 6.0, "rest_days": 7}, {"employee_id": 2, "name": "乙", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 33.0, "actual": 17.5, "period_actual": 12.5, "historical_actual": 0.0, "historical_days": 0, "scheduled": 12.5, "manual_attend": 0.0, "worked_days": 19, "net": -20.5, "net_final": -17.0, "auto_overtime": 0.0, "auto_owe": 15.5, "manual_overtime": 0.0, "manual_owe": 1.5, "overtime": 0, "owe": 17.0, "by_shift": {"evening": 8.0, "morning": 4.0, "half": 1.5, "night": 4.0}, "adjustments": [{"id": 2, "date": "2026-11-06", "kind": "owe", "amount": -1.5, "note": ""}], "rest_overtime": 5.0, "rest_days": 6}, {"employee_id": 3, "name": "丙", "employee_no": "", "team": "二班", "expect_mode": "auto", "expected": 33.0, "actual": 20.5, "period_actual": 15.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 14.0, "manual_attend": 1.0, "worked_days": 22, "net": -18.0, "net_final": -12.5, "auto_overtime": 0.0, "auto_owe": 12.5, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 12.5, "by_shift": {"morning": 7.0, "evening": 5.0, "night": 5.0, "half": 2.5}, "adjustments": [{"id": 1, "date": "2026-11-07", "kind": "attend", "amount": 1.0, "note": ""}], "rest_overtime": 5.5, "rest_days": 6}, {"employee_id": 4, "name": "丁", "employee_no": "", "team": "二班", "expect_mode": "fixed", "expected": 60.0, "actual": 16.0, "period_actual": 11.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 11.0, "manual_attend": 0.0, "worked_days": 19, "net": -49.0, "net_final": -44.0, "auto_overtime": 0.0, "auto_owe": 44.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 44.0, "by_shift": {"morning": 7.0, "half": 3.0, "night": 3.0, "evening": 3.0}, "adjustments": [], "rest_overtime": 5.0, "rest_days": 5}], "totals": {"expected": 159.0, "actual": 74.0, "period_actual": 52.5, "historical_actual": 0.0, "overtime": 0, "owe": 84.5, "people": 4, "workdays": 33}, "shifts": {"morning": {"code": "morning", "name": "白班", "weight": 1.0, "color": "#2a78d6", "sort_order": 10, "active": 1}, "evening": {"code": "evening", "name": "中班", "weight": 1.0, "color": "#eb6834", "sort_order": 20, "active": 1}, "night": {"code": "night", "name": "夜班", "weight": 1.0, "color": "#4a3aa7", "sort_order": 30, "active": 1}, "half": {"code": "half", "name": "半班", "weight": 0.5, "color": "#1baf7a", "sort_order": 40, "active": 1}}}, "monthly": [{"month": "2026-09", "from": "2026-09-01", "to": "2026-09-30", "totals": {"expected": 86.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "overtime": 0, "owe": 86.0, "people": 4, "workdays": 22}, "employees": [{"employee_id": 1, "name": "甲", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 22.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": -22.0, "net_final": -22.0, "auto_overtime": 0.0, "auto_owe": 22.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 22.0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}, {"employee_id": 2, "name": "乙", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 22.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": -22.0, "net_final": -22.0, "auto_overtime": 0.0, "auto_owe": 22.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 22.0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}, {"employee_id": 3, "name": "丙", "employee_no": "", "team": "二班", "expect_mode": "auto", "expected": 22.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": -22.0, "net_final": -22.0, "auto_overtime": 0.0, "auto_owe": 22.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 22.0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}, {"employee_id": 4, "name": "丁", "employee_no": "", "team": "二班", "expect_mode": "fixed", "expected": 20.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": -20.0, "net_final": -20.0, "auto_overtime": 0.0, "auto_owe": 20.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 20.0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}]}, {"month": "2026-10", "from": "2026-10-01", "to": "2026-10-31", "totals": {"expected": 86.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "overtime": 0, "owe": 86.0, "people": 4, "workdays": 22}, "employees": [{"employee_id": 1, "name": "甲", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 22.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": -22.0, "net_final": -22.0, "auto_overtime": 0.0, "auto_owe": 22.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 22.0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}, {"employee_id": 2, "name": "乙", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 22.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": -22.0, "net_final": -22.0, "auto_overtime": 0.0, "auto_owe": 22.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 22.0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}, {"employee_id": 3, "name": "丙", "employee_no": "", "team": "二班", "expect_mode": "auto", "expected": 22.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": -22.0, "net_final": -22.0, "auto_overtime": 0.0, "auto_owe": 22.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 22.0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}, {"employee_id": 4, "name": "丁", "employee_no": "", "team": "二班", "expect_mode": "fixed", "expected": 20.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": -20.0, "net_final": -20.0, "auto_overtime": 0.0, "auto_owe": 20.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 20.0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}]}, {"month": "2026-11", "from": "2026-11-01", "to": "2026-11-30", "totals": {"expected": 53.0, "actual": 74.0, "period_actual": 52.5, "historical_actual": 0.0, "overtime": 25.5, "owe": 4.0, "people": 4, "workdays": 11}, "employees": [{"employee_id": 1, "name": "甲", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 11.0, "actual": 20.0, "period_actual": 14.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 14.0, "manual_attend": 0.0, "worked_days": 22, "net": 3.0, "net_final": 11.0, "auto_overtime": 9.0, "auto_owe": 0.0, "manual_overtime": 2.0, "manual_owe": 0.0, "overtime": 11.0, "owe": 0, "by_shift": {"morning": 9.0, "night": 6.0, "evening": 3.0, "half": 2.0}, "adjustments": [{"id": 3, "date": "2026-11-05", "kind": "overtime", "amount": 2.0, "note": ""}], "rest_overtime": 6.0, "rest_days": 7}, {"employee_id": 2, "name": "乙", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 11.0, "actual": 17.5, "period_actual": 12.5, "historical_actual": 0.0, "historical_days": 0, "scheduled": 12.5, "manual_attend": 0.0, "worked_days": 19, "net": 1.5, "net_final": 5.0, "auto_overtime": 6.5, "auto_owe": 0.0, "manual_overtime": 0.0, "manual_owe": 1.5, "overtime": 5.0, "owe": 0, "by_shift": {"evening": 8.0, "morning": 4.0, "half": 1.5, "night": 4.0}, "adjustments": [{"id": 2, "date": "2026-11-06", "kind": "owe", "amount": -1.5, "note": ""}], "rest_overtime": 5.0, "rest_days": 6}, {"employee_id": 3, "name": "丙", "employee_no": "", "team": "二班", "expect_mode": "auto", "expected": 11.0, "actual": 20.5, "period_actual": 15.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 14.0, "manual_attend": 1.0, "worked_days": 22, "net": 4.0, "net_final": 9.5, "auto_overtime": 9.5, "auto_owe": 0.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 9.5, "owe": 0, "by_shift": {"morning": 7.0, "evening": 5.0, "night": 5.0, "half": 2.5}, "adjustments": [{"id": 1, "date": "2026-11-07", "kind": "attend", "amount": 1.0, "note": ""}], "rest_overtime": 5.5, "rest_days": 6}, {"employee_id": 4, "name": "丁", "employee_no": "", "team": "二班", "expect_mode": "fixed", "expected": 20.0, "actual": 16.0, "period_actual": 11.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 11.0, "manual_attend": 0.0, "worked_days": 19, "net": -9.0, "net_final": -4.0, "auto_overtime": 0.0, "auto_owe": 4.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 4.0, "by_shift": {"morning": 7.0, "half": 3.0, "night": 3.0, "evening": 3.0}, "adjustments": [], "rest_overtime": 5.0, "rest_days": 5}]}, {"month": "2026-12", "from": "2026-12-01", "to": "2026-12-31", "totals": {"expected": 20.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "overtime": 0, "owe": 20.0, "people": 4, "workdays": 0}, "employees": [{"employee_id": 1, "name": "甲", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 0.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": 0.0, "net_final": 0.0, "auto_overtime": 0.0, "auto_owe": 0.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}, {"employee_id": 2, "name": "乙", "employee_no": "", "team": "一班", "expect_mode": "auto", "expected": 0.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": 0.0, "net_final": 0.0, "auto_overtime": 0.0, "auto_owe": 0.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}, {"employee_id": 3, "name": "丙", "employee_no": "", "team": "二班", "expect_mode": "auto", "expected": 0.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": 0.0, "net_final": 0.0, "auto_overtime": 0.0, "auto_owe": 0.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}, {"employee_id": 4, "name": "丁", "employee_no": "", "team": "二班", "expect_mode": "fixed", "expected": 20.0, "actual": 0.0, "period_actual": 0.0, "historical_actual": 0.0, "historical_days": 0, "scheduled": 0.0, "manual_attend": 0.0, "worked_days": 0, "net": -20.0, "net_final": -20.0, "auto_overtime": 0.0, "auto_owe": 20.0, "manual_overtime": 0.0, "manual_owe": 0.0, "overtime": 0, "owe": 20.0, "by_shift": {}, "adjustments": [], "rest_overtime": 0.0, "rest_days": 0}]}], "daily": [{"date": "2026-11-01", "is_workday": false, "people": 4, "headcount": {}, "shifts": {"morning": 3.0, "evening": 1.0}}, {"date": "2026-11-02", "is_workday": true, "people": 4, "headcount": {}, "shifts": {"morning": 2.0, "evening": 1.0, "half": 0.5}}, {"date": "2026-11-03", "is_workday": true, "people": 3, "headcount": {}, "shifts": {"night": 2.0, "evening": 1.0}}, {"date": "2026-11-04", "is_workday": true, "people": 3, "headcount": {}, "shifts": {"evening": 1.0, "morning": 1.0, "night": 1.0}}, {"date": "2026-11-05", "is_workday": true, "people": 2, "headcount": {}, "shifts": {"morning": 2.0}}, {"date": "2026-11-06", "is_workday": true, "people": 3, "headcount": {}, "shifts": {"night": 2.0, "morning": 1.0}}, {"date": "2026-11-07", "is_workday": false, "people": 1, "headcount": {}, "shifts": {"evening": 1.0}}, {"date": "2026-11-08", "is_workday": false, "people": 3, "headcount": {}, "shifts": {"half": 0.5, "night": 2.0}}, {"date": "2026-11-09", "is_workday": true, "people": 4, "headcount": {}, "shifts": {"night": 1.0, "morning": 1.0, "evening": 2.0}}, {"date": "2026-11-10", "is_workday": false, "people": 4, "headcount": {}, "shifts": {"half": 0.5, "evening": 1.0, "morning": 2.0}}]}
+{
+  "nov": {
+    "range": {
+      "from": "2026-11-01",
+      "to": "2026-11-30"
+    },
+    "counted_from": "2026-11-01",
+    "historical": false,
+    "workdays": 20,
+    "daily_hours": 8.0,
+    "days": [
+      {
+        "date": "2026-11-01",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-02",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-03",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-04",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-05",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-06",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-07",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-08",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-09",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-10",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-11",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-12",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-13",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-14",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-15",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-16",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-17",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-18",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-19",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-20",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-21",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-22",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-23",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-24",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-25",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-26",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-27",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-28",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-29",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-30",
+        "is_workday": true
+      }
+    ],
+    "employees": [
+      {
+        "employee_id": 1,
+        "name": "甲",
+        "team": "一班",
+        "expect_mode": "auto",
+        "daily_hours": 8.0,
+        "expected": 160.0,
+        "actual": 160.0,
+        "period_actual": 112.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 112.0,
+        "manual_attend": 0.0,
+        "worked_days": 22,
+        "rest_overtime": 48.0,
+        "rest_days": 7,
+        "net": -48.0,
+        "net_final": 16.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 48.0,
+        "manual_overtime": 16.0,
+        "manual_owe": 0.0,
+        "overtime": 16.0,
+        "owe": 0.0
+      },
+      {
+        "employee_id": 2,
+        "name": "乙",
+        "team": "一班",
+        "expect_mode": "auto",
+        "daily_hours": 8.0,
+        "expected": 160.0,
+        "actual": 140.0,
+        "period_actual": 100.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 100.0,
+        "manual_attend": 0.0,
+        "worked_days": 19,
+        "rest_overtime": 40.0,
+        "rest_days": 6,
+        "net": -60.0,
+        "net_final": -32.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 60.0,
+        "manual_overtime": 0.0,
+        "manual_owe": 12.0,
+        "overtime": 0.0,
+        "owe": 32.0
+      },
+      {
+        "employee_id": 3,
+        "name": "丙",
+        "team": "二班",
+        "expect_mode": "auto",
+        "daily_hours": 8.0,
+        "expected": 160.0,
+        "actual": 164.0,
+        "period_actual": 120.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 112.0,
+        "manual_attend": 8.0,
+        "worked_days": 22,
+        "rest_overtime": 44.0,
+        "rest_days": 6,
+        "net": -40.0,
+        "net_final": 4.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 40.0,
+        "manual_overtime": 0.0,
+        "manual_owe": 0.0,
+        "overtime": 4.0,
+        "owe": 0.0
+      },
+      {
+        "employee_id": 4,
+        "name": "丁",
+        "team": "二班",
+        "expect_mode": "fixed",
+        "daily_hours": 8.0,
+        "expected": 160.0,
+        "actual": 128.0,
+        "period_actual": 88.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 88.0,
+        "manual_attend": 0.0,
+        "worked_days": 19,
+        "rest_overtime": 40.0,
+        "rest_days": 5,
+        "net": -72.0,
+        "net_final": -32.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 72.0,
+        "manual_overtime": 0.0,
+        "manual_owe": 0.0,
+        "overtime": 0.0,
+        "owe": 32.0
+      }
+    ],
+    "totals": {
+      "expected": 640.0,
+      "actual": 592.0,
+      "period_actual": 420.0,
+      "historical_actual": 0.0,
+      "overtime": 20.0,
+      "owe": 64.0,
+      "people": 4,
+      "workdays": 20
+    }
+  },
+  "mid": {
+    "range": {
+      "from": "2026-11-05",
+      "to": "2026-11-20"
+    },
+    "counted_from": "2026-11-05",
+    "historical": false,
+    "workdays": 11,
+    "daily_hours": 8.0,
+    "days": [
+      {
+        "date": "2026-11-05",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-06",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-07",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-08",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-09",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-10",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-11",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-12",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-13",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-14",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-15",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-16",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-17",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-18",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-19",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-20",
+        "is_workday": true
+      }
+    ],
+    "employees": [
+      {
+        "employee_id": 1,
+        "name": "甲",
+        "team": "一班",
+        "expect_mode": "auto",
+        "daily_hours": 8.0,
+        "expected": 88.0,
+        "actual": 76.0,
+        "period_actual": 48.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 48.0,
+        "manual_attend": 0.0,
+        "worked_days": 11,
+        "rest_overtime": 28.0,
+        "rest_days": 4,
+        "net": -40.0,
+        "net_final": 4.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 40.0,
+        "manual_overtime": 16.0,
+        "manual_owe": 0.0,
+        "overtime": 4.0,
+        "owe": 0.0
+      },
+      {
+        "employee_id": 2,
+        "name": "乙",
+        "team": "一班",
+        "expect_mode": "auto",
+        "daily_hours": 8.0,
+        "expected": 88.0,
+        "actual": 80.0,
+        "period_actual": 64.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 64.0,
+        "manual_attend": 0.0,
+        "worked_days": 11,
+        "rest_overtime": 16.0,
+        "rest_days": 3,
+        "net": -24.0,
+        "net_final": -20.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 24.0,
+        "manual_overtime": 0.0,
+        "manual_owe": 12.0,
+        "overtime": 0.0,
+        "owe": 20.0
+      },
+      {
+        "employee_id": 3,
+        "name": "丙",
+        "team": "二班",
+        "expect_mode": "auto",
+        "daily_hours": 8.0,
+        "expected": 88.0,
+        "actual": 100.0,
+        "period_actual": 68.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 60.0,
+        "manual_attend": 8.0,
+        "worked_days": 12,
+        "rest_overtime": 32.0,
+        "rest_days": 4,
+        "net": -20.0,
+        "net_final": 12.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 20.0,
+        "manual_overtime": 0.0,
+        "manual_owe": 0.0,
+        "overtime": 12.0,
+        "owe": 0.0
+      },
+      {
+        "employee_id": 4,
+        "name": "丁",
+        "team": "二班",
+        "expect_mode": "fixed",
+        "daily_hours": 8.0,
+        "expected": 160.0,
+        "actual": 72.0,
+        "period_actual": 48.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 48.0,
+        "manual_attend": 0.0,
+        "worked_days": 11,
+        "rest_overtime": 24.0,
+        "rest_days": 3,
+        "net": -112.0,
+        "net_final": -88.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 112.0,
+        "manual_overtime": 0.0,
+        "manual_owe": 0.0,
+        "overtime": 0.0,
+        "owe": 88.0
+      }
+    ],
+    "totals": {
+      "expected": 424.0,
+      "actual": 328.0,
+      "period_actual": 228.0,
+      "historical_actual": 0.0,
+      "overtime": 16.0,
+      "owe": 108.0,
+      "people": 4,
+      "workdays": 11
+    }
+  },
+  "q4": {
+    "range": {
+      "from": "2026-10-01",
+      "to": "2026-12-31"
+    },
+    "counted_from": "2026-10-01",
+    "historical": false,
+    "workdays": 42,
+    "daily_hours": 8.0,
+    "days": [
+      {
+        "date": "2026-10-01",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-02",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-03",
+        "is_workday": false
+      },
+      {
+        "date": "2026-10-04",
+        "is_workday": false
+      },
+      {
+        "date": "2026-10-05",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-06",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-07",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-08",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-09",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-10",
+        "is_workday": false
+      },
+      {
+        "date": "2026-10-11",
+        "is_workday": false
+      },
+      {
+        "date": "2026-10-12",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-13",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-14",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-15",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-16",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-17",
+        "is_workday": false
+      },
+      {
+        "date": "2026-10-18",
+        "is_workday": false
+      },
+      {
+        "date": "2026-10-19",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-20",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-21",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-22",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-23",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-24",
+        "is_workday": false
+      },
+      {
+        "date": "2026-10-25",
+        "is_workday": false
+      },
+      {
+        "date": "2026-10-26",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-27",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-28",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-29",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-30",
+        "is_workday": true
+      },
+      {
+        "date": "2026-10-31",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-01",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-02",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-03",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-04",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-05",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-06",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-07",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-08",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-09",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-10",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-11",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-12",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-13",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-14",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-15",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-16",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-17",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-18",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-19",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-20",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-21",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-22",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-23",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-24",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-25",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-26",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-27",
+        "is_workday": true
+      },
+      {
+        "date": "2026-11-28",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-29",
+        "is_workday": false
+      },
+      {
+        "date": "2026-11-30",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-01",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-02",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-03",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-04",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-05",
+        "is_workday": false
+      },
+      {
+        "date": "2026-12-06",
+        "is_workday": false
+      },
+      {
+        "date": "2026-12-07",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-08",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-09",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-10",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-11",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-12",
+        "is_workday": false
+      },
+      {
+        "date": "2026-12-13",
+        "is_workday": false
+      },
+      {
+        "date": "2026-12-14",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-15",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-16",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-17",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-18",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-19",
+        "is_workday": false
+      },
+      {
+        "date": "2026-12-20",
+        "is_workday": false
+      },
+      {
+        "date": "2026-12-21",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-22",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-23",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-24",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-25",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-26",
+        "is_workday": false
+      },
+      {
+        "date": "2026-12-27",
+        "is_workday": false
+      },
+      {
+        "date": "2026-12-28",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-29",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-30",
+        "is_workday": true
+      },
+      {
+        "date": "2026-12-31",
+        "is_workday": true
+      }
+    ],
+    "employees": [
+      {
+        "employee_id": 1,
+        "name": "甲",
+        "team": "一班",
+        "expect_mode": "auto",
+        "daily_hours": 8.0,
+        "expected": 336.0,
+        "actual": 160.0,
+        "period_actual": 112.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 112.0,
+        "manual_attend": 0.0,
+        "worked_days": 22,
+        "rest_overtime": 48.0,
+        "rest_days": 7,
+        "net": -224.0,
+        "net_final": -160.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 224.0,
+        "manual_overtime": 16.0,
+        "manual_owe": 0.0,
+        "overtime": 0.0,
+        "owe": 160.0
+      },
+      {
+        "employee_id": 2,
+        "name": "乙",
+        "team": "一班",
+        "expect_mode": "auto",
+        "daily_hours": 8.0,
+        "expected": 336.0,
+        "actual": 140.0,
+        "period_actual": 100.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 100.0,
+        "manual_attend": 0.0,
+        "worked_days": 19,
+        "rest_overtime": 40.0,
+        "rest_days": 6,
+        "net": -236.0,
+        "net_final": -208.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 236.0,
+        "manual_overtime": 0.0,
+        "manual_owe": 12.0,
+        "overtime": 0.0,
+        "owe": 208.0
+      },
+      {
+        "employee_id": 3,
+        "name": "丙",
+        "team": "二班",
+        "expect_mode": "auto",
+        "daily_hours": 8.0,
+        "expected": 336.0,
+        "actual": 164.0,
+        "period_actual": 120.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 112.0,
+        "manual_attend": 8.0,
+        "worked_days": 22,
+        "rest_overtime": 44.0,
+        "rest_days": 6,
+        "net": -216.0,
+        "net_final": -172.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 216.0,
+        "manual_overtime": 0.0,
+        "manual_owe": 0.0,
+        "overtime": 0.0,
+        "owe": 172.0
+      },
+      {
+        "employee_id": 4,
+        "name": "丁",
+        "team": "二班",
+        "expect_mode": "fixed",
+        "daily_hours": 8.0,
+        "expected": 480.0,
+        "actual": 128.0,
+        "period_actual": 88.0,
+        "historical_actual": 0.0,
+        "historical_days": 0,
+        "scheduled": 88.0,
+        "manual_attend": 0.0,
+        "worked_days": 19,
+        "rest_overtime": 40.0,
+        "rest_days": 5,
+        "net": -392.0,
+        "net_final": -352.0,
+        "auto_overtime": 0.0,
+        "auto_owe": 392.0,
+        "manual_overtime": 0.0,
+        "manual_owe": 0.0,
+        "overtime": 0.0,
+        "owe": 352.0
+      }
+    ],
+    "totals": {
+      "expected": 1488.0,
+      "actual": 592.0,
+      "period_actual": 420.0,
+      "historical_actual": 0.0,
+      "overtime": 0.0,
+      "owe": 892.0,
+      "people": 4,
+      "workdays": 42
+    }
+  },
+  "monthly": [
+    {
+      "month": "2026-09",
+      "from": "2026-09-01",
+      "to": "2026-09-30",
+      "totals": {
+        "expected": 688.0,
+        "actual": 0.0,
+        "period_actual": 0.0,
+        "historical_actual": 0.0,
+        "overtime": 0.0,
+        "owe": 688.0,
+        "people": 4,
+        "workdays": 22
+      }
+    },
+    {
+      "month": "2026-10",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "totals": {
+        "expected": 688.0,
+        "actual": 0.0,
+        "period_actual": 0.0,
+        "historical_actual": 0.0,
+        "overtime": 0.0,
+        "owe": 688.0,
+        "people": 4,
+        "workdays": 22
+      }
+    },
+    {
+      "month": "2026-11",
+      "from": "2026-11-01",
+      "to": "2026-11-30",
+      "totals": {
+        "expected": 640.0,
+        "actual": 592.0,
+        "period_actual": 420.0,
+        "historical_actual": 0.0,
+        "overtime": 20.0,
+        "owe": 64.0,
+        "people": 4,
+        "workdays": 20
+      }
+    },
+    {
+      "month": "2026-12",
+      "from": "2026-12-01",
+      "to": "2026-12-31",
+      "totals": {
+        "expected": 160.0,
+        "actual": 0.0,
+        "period_actual": 0.0,
+        "historical_actual": 0.0,
+        "overtime": 0.0,
+        "owe": 160.0,
+        "people": 4,
+        "workdays": 0
+      }
+    }
+  ],
+  "daily": [
+    {
+      "date": "2026-11-01",
+      "is_workday": false,
+      "people": 4,
+      "hours": 32.0
+    },
+    {
+      "date": "2026-11-02",
+      "is_workday": true,
+      "people": 4,
+      "hours": 28.0
+    },
+    {
+      "date": "2026-11-03",
+      "is_workday": true,
+      "people": 3,
+      "hours": 24.0
+    },
+    {
+      "date": "2026-11-04",
+      "is_workday": true,
+      "people": 3,
+      "hours": 24.0
+    },
+    {
+      "date": "2026-11-05",
+      "is_workday": true,
+      "people": 2,
+      "hours": 16.0
+    },
+    {
+      "date": "2026-11-06",
+      "is_workday": true,
+      "people": 3,
+      "hours": 24.0
+    },
+    {
+      "date": "2026-11-07",
+      "is_workday": false,
+      "people": 1,
+      "hours": 8.0
+    },
+    {
+      "date": "2026-11-08",
+      "is_workday": false,
+      "people": 3,
+      "hours": 20.0
+    },
+    {
+      "date": "2026-11-09",
+      "is_workday": true,
+      "people": 4,
+      "hours": 32.0
+    },
+    {
+      "date": "2026-11-10",
+      "is_workday": false,
+      "people": 4,
+      "hours": 28.0
+    }
+  ]
+}
