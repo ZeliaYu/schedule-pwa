@@ -77,6 +77,7 @@ const state = {
   showTable: false,
   trendMetric: 'net',
   showHidden: false,     // 月排班/统计是否显示被屏蔽人员
+  showCheck: false,      // 今日页是否展开出勤核对
   rowDrag: null,         // 拖动排序中的行
 };
 
@@ -1575,14 +1576,20 @@ async function renderDay() {
   const d = parseISO(target);
   const isToday = target === todayISO();
   const dayCol = state.calendar?.days?.find?.((x) => x.date === target);
+  const isRest = dayCol ? dayCol.is_workday === false : false;
   const assigns = state.schedule.assignments
     .filter((a) => a.date === target)
     .sort((a, b) => (a.start || '99').localeCompare(b.start || '99'));
   const stats = state.dayStats;
   const totalHours = dayHours(assigns);
+  const peopleCount = new Set(assigns.map((a) => a.employee_id)).size;
+  const orgName = state.settings.org_name || '排班管理';
+  // 按时间段分组（没有起止时间的归到「时间待定」）
+  const groups = groupBySlot(assigns);
+  const noAssign = state.employees.filter((e) => !assigns.some((a) => a.employee_id === e.id));
 
   main.innerHTML = `
-    <div class="range-bar" style="justify-content:space-between">
+    <div class="range-bar no-print" style="justify-content:space-between">
       <div class="month-nav">
         <button class="icon-btn" id="prevDay" aria-label="前一天">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -1593,43 +1600,81 @@ async function renderDay() {
         </button>
         <button class="btn sm ghost" id="todayBtn">回到今天</button>
       </div>
-      <div style="display:flex;gap:10px;align-items:center">
-        <span class="chip">出勤 <b style="margin-left:4px">${new Set(assigns.map((a) => a.employee_id)).size}</b> 人</span>
-        <span class="chip">合计 <b style="margin-left:4px">${fmtNum(totalHours)}</b> 小时</span>
-      </div>
-    </div>
-
-    <div class="card" style="margin-bottom:16px">
-      <div class="card-head">
-        <h2>${isToday ? '今日排班' : '当日排班'}</h2>
-        <span class="sub">${target} ${weekdayCN(d)}${dayCol && dayCol.is_workday === false ? ' · 休息日（上班算加班）' : ''}</span>
-        <div class="spacer"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="chip no-print">出勤 <b style="margin-left:4px">${peopleCount}</b> 人</span>
+        <span class="chip no-print">合计 <b style="margin-left:4px">${fmtNum(totalHours)}</b> 小时</span>
+        <button class="btn sm" id="exportDayImg" title="生成图片，可直接发到群里">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          导出图片
+        </button>
         <button class="btn sm primary" id="addShiftBtn">+ 排班</button>
       </div>
-      <div class="card-body">
-        ${assigns.length ? `
-        <div class="table-wrap">
-          <table class="data">
-            <thead><tr><th>时间段</th><th class="num">工时</th><th>人员</th><th>工作内容</th><th></th></tr></thead>
-            <tbody>
-              ${assigns.map((a) => {
+    </div>
+
+    <!-- 可截图的排班看板 -->
+    <div class="card day-sheet" id="daySheet">
+      <div class="sheet-head">
+        <div class="sheet-title-row">
+          <div>
+            <div class="sheet-org">${esc(orgName)}</div>
+            <div class="sheet-title">${monthDayCN(d)}<span class="sheet-week">${weekdayCN(d)}</span></div>
+          </div>
+          ${isRest ? '<span class="sheet-badge">休息日</span>' : ''}
+        </div>
+        <div class="sheet-meta">
+          <span>出勤 <b>${peopleCount}</b> 人</span>
+          <span>合计 <b>${fmtNum(totalHours)}</b> 小时</span>
+          <span>共 <b>${groups.length}</b> 个时段</span>
+        </div>
+      </div>
+
+      <div class="sheet-body">
+        ${groups.length ? groups.map((g) => `
+          <div class="slot-group">
+            <div class="slot-group-head">
+              <span class="slot-group-time">${g.start && g.end ? `${g.start} – ${g.end}` : '时间待定'}</span>
+              <span class="slot-group-sub">
+                ${g.start && g.end ? `${fmtNum(g.hours)} 小时` : ''}
+                <span class="slot-group-count">${g.items.length} 人</span>
+              </span>
+            </div>
+            <div class="slot-group-people">
+              ${g.items.map((a) => {
                 const e = empById()[a.employee_id] || { name: a.name };
-                return `<tr>
-                  <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${a.start && a.end ? `${a.start}–${a.end}` : '—'}</td>
-                  <td class="num">${fmtNum(a.hours)}</td>
-                  <td><div class="name-cell"><span class="avatar">${esc(initials(e.name))}</span>${esc(e.name)}</div></td>
-                  <td style="color:var(--text-secondary)">${esc(a.content || '—')}</td>
-                  <td style="text-align:right"><button class="btn sm ghost" data-edit-slot="${a.employee_id}" data-slot-date="${a.date}">编辑</button></td>
-                </tr>`;
+                return `<div class="slot-person" data-sheet-emp="${a.employee_id}" title="点击编辑">
+                  <span class="slot-person-name">${esc(e.name)}</span>
+                  ${a.content ? `<span class="slot-person-work">${esc(a.content)}</span>` : '<span class="slot-person-work muted">—</span>'}
+                </div>`;
               }).join('')}
-            </tbody>
-          </table>
-        </div>` : '<div class="empty" style="padding:36px 0"><p style="color:var(--text-muted)">这天还没有排班</p></div>'}
+            </div>
+          </div>`).join('') : `
+          <div class="sheet-empty">
+            <div class="sheet-empty-icon">☕</div>
+            <div>这天还没有排班</div>
+          </div>`}
+      </div>
+
+      ${noAssign.length && assigns.length ? `
+        <div class="sheet-rest">
+          <span class="sheet-rest-label">休息</span>
+          <span class="sheet-rest-names">${noAssign.map((e) => esc(e.name)).join('、')}</span>
+        </div>` : ''}
+
+      <div class="sheet-foot">
+        <span>${esc(orgName)}</span>
+        <span>${target}</span>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-head"><h2>当日出勤核对</h2><span class="sub">相对应出勤的实时差额（单位：小时）</span></div>
+    <!-- 出勤核对（仅屏幕显示） -->
+    <div class="card no-print">
+      <div class="card-head">
+        <h2>出勤核对</h2>
+        <span class="sub">相对应出勤的实时差额（单位：小时）</span>
+        <div class="spacer"></div>
+        <button class="btn sm ghost" id="toggleCheck" aria-pressed="${state.showCheck}">${state.showCheck ? '收起' : '展开'}</button>
+      </div>
+      ${state.showCheck ? `
       <div class="card-body">
         <div class="table-wrap">
           <table class="data">
@@ -1639,7 +1684,7 @@ async function renderDay() {
                 const mine = assigns.filter((a) => a.employee_id === e.id);
                 const st = (stats?.employees || []).find((s) => s.employee_id === e.id) || {};
                 return `<tr>
-                  <td><div class="name-cell"><span class="avatar">${esc(initials(e.name))}</span>${esc(e.name)}</div></td>
+                  <td><div class="name-cell"><span class="avatar">${esc(initials(e.name))}</span><span>${esc(e.name)}</span></div></td>
                   <td>${mine.length
                     ? mine.map((a) => `<span class="slot-tag" title="${esc(slotTitle(a))}">${esc(a.start && a.end ? `${a.start}-${a.end}` : fmtNum(a.hours) + 'h')}</span>`).join(' ')
                     : '<span class="num-zero">休息</span>'}</td>
@@ -1651,7 +1696,7 @@ async function renderDay() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>` : ''}
     </div>
   `;
 
@@ -1659,12 +1704,349 @@ async function renderDay() {
   $('#nextDay').addEventListener('click', () => { state.dayCursor = addDays(state.dayCursor, 1); renderDay(); });
   $('#todayBtn').addEventListener('click', () => { state.dayCursor = new Date(); renderDay(); });
   $('#addShiftBtn').addEventListener('click', () => openAddPersonToDay(target));
-  $$('[data-edit-slot]').forEach((btn) => btn.addEventListener('click', () => {
-    openShiftPicker(btn.dataset.slotDate, Number(btn.dataset.editSlot));
+  $('#toggleCheck')?.addEventListener('click', () => {
+    state.showCheck = !state.showCheck;
+    renderDay();
+  });
+  $('#exportDayImg')?.addEventListener('click', () => exportDayImage(target));
+  // 看板里点某个人 → 直接编辑那条
+  $$('[data-sheet-emp]').forEach((el) => el.addEventListener('click', () => {
+    openShiftPicker(target, Number(el.dataset.sheetEmp));
   }));
 }
 
-/** 当天排班：选人 → 进入该人的时段编辑 */
+/** 把当天排班按时段分组，用于看板展示 */
+function groupBySlot(assigns) {
+  const map = new Map();
+  for (const a of assigns) {
+    const key = `${a.start || ''}|${a.end || ''}`;
+    if (!map.has(key)) {
+      map.set(key, { start: a.start || '', end: a.end || '', hours: Number(a.hours) || 0, items: [] });
+    }
+    map.get(key).items.push(a);
+  }
+  const groups = [...map.values()];
+  groups.sort((a, b) => {
+    if (!a.start && b.start) return 1;
+    if (a.start && !b.start) return -1;
+    return (a.start || '').localeCompare(b.start || '');
+  });
+  // 同组工时取众数（同一时段的人通常相同）
+  for (const g of groups) {
+    const counts = {};
+    for (const it of g.items) counts[it.hours] = (counts[it.hours] || 0) + 1;
+    let best = g.hours, n = 0;
+    for (const [h, c] of Object.entries(counts)) {
+      if (c > n) { n = c; best = Number(h); }
+    }
+    g.hours = best;
+  }
+  return groups;
+}
+
+/** 2026-11-03 → 11月3日 */
+function monthDayCN(d) {
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+/* ------------------------------------------------------------ 导出排班图片
+   Chrome 不允许把含 foreignObject 的 SVG 画进 canvas（canvas 会被污染），
+   所以这里直接在 canvas 上绘制，输出 2 倍清晰度的 PNG。
+*/
+const IMG_FONT = '-apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+/** 文字按宽度折行 */
+function wrapText(ctx, text, maxWidth) {
+  const out = [];
+  let line = '';
+  for (const ch of String(text)) {
+    const test = line + ch;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      out.push(line);
+      line = ch;
+    } else {
+      line = test;
+    }
+  }
+  if (line) out.push(line);
+  return out.length ? out : [''];
+}
+
+/**
+ * 把当天排班画成一张适合发群的图片
+ * @returns {HTMLCanvasElement}
+ */
+function drawDaySheetCanvas(target, d, assigns, groups, noAssign, orgName, isRest) {
+  const W = 900;
+  const PAD = 40;
+  const INNER = W - PAD * 2;
+  const scale = 2;
+
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d');
+  const font = (weight, size) => `${weight} ${size}px ${IMG_FONT}`;
+
+  // ---- 先量高度（用临时 canvas 测量）
+  let y = 0;
+  const peopleCols = 2;
+  const cardGap = 12;
+  const cardH = 44;
+  const cardW = (INNER - cardGap * (peopleCols - 1)) / peopleCols;
+
+  const headerH = 118;
+  let bodyH = 0;
+  for (const g of groups) {
+    bodyH += 34;                                   // 时段标题行
+    bodyH += Math.ceil(g.items.length / peopleCols) * (cardH + cardGap) + 6;
+    bodyH += 18;                                   // 组分隔间距
+  }
+  if (!groups.length) bodyH = 96;
+
+  // 休息名单折行
+  ctx.font = font(400, 13.5);
+  const restNames = noAssign.map((e) => e.name).join('、');
+  const restLines = (noAssign.length && assigns.length)
+    ? wrapText(ctx, restNames, INNER - 70) : [];
+  const restH = restLines.length ? (26 + restLines.length * 20) : 0;
+
+  const footerH = 40;
+  const H = PAD + headerH + bodyH + restH + footerH + 24;
+
+  c.width = W * scale;
+  c.height = H * scale;
+  ctx.scale(scale, scale);
+
+  // 背景
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // 外框
+  ctx.strokeStyle = '#e4e3dd';
+  ctx.lineWidth = 1;
+  roundRectPath(ctx, 12, 12, W - 24, H - 24, 14);
+  ctx.stroke();
+
+  y = PAD;
+
+  // ---- 头部
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#7a7873';
+  ctx.font = font(500, 12.5);
+  ctx.fillText(orgName, PAD, y + 4);
+
+  // 日期
+  const title = monthDayCN(d);
+  ctx.fillStyle = '#1a1a19';
+  ctx.font = font(700, 32);
+  ctx.fillText(title, PAD, y + 40);
+  const titleW = ctx.measureText(title).width;
+  ctx.fillStyle = '#6b6b66';
+  ctx.font = font(500, 16);
+  ctx.fillText(weekdayCN(d), PAD + titleW + 12, y + 38);
+
+  // 休息日徽标
+  if (isRest) {
+    ctx.font = font(600, 12);
+    const bw = ctx.measureText('休息日').width + 22;
+    ctx.fillStyle = '#f0efea';
+    roundRectPath(ctx, W - PAD - bw, y + 14, bw, 26, 13);
+    ctx.fill();
+    ctx.fillStyle = '#6b6b66';
+    ctx.fillText('休息日', W - PAD - bw + 11, y + 31);
+  }
+
+  // meta
+  const peopleCount = new Set(assigns.map((a) => a.employee_id)).size;
+  const totalHours = dayHours(assigns);
+  let mx = PAD;
+  const my = y + 74;
+  const meta = [
+    ['出勤 ', String(peopleCount), ' 人'],
+    ['合计 ', fmtNum(totalHours), ' 小时'],
+    ['共 ', String(groups.length), ' 个时段'],
+  ];
+  for (const [pre, val, post] of meta) {
+    ctx.font = font(400, 13.5);
+    ctx.fillStyle = '#6b6b66';
+    ctx.fillText(pre, mx, my);
+    mx += ctx.measureText(pre).width;
+    ctx.font = font(700, 17);
+    ctx.fillStyle = '#1a1a19';
+    ctx.fillText(val, mx, my);
+    mx += ctx.measureText(val).width;
+    ctx.font = font(400, 13.5);
+    ctx.fillStyle = '#6b6b66';
+    ctx.fillText(post, mx, my);
+    mx += ctx.measureText(post).width + 26;
+  }
+
+  // 分隔线
+  y += headerH;
+  ctx.strokeStyle = '#e9e8e2';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD, y);
+  ctx.lineTo(W - PAD, y);
+  ctx.stroke();
+
+  // ---- 各时段
+  y += 12;
+  if (!groups.length) {
+    ctx.fillStyle = '#9a9893';
+    ctx.font = font(400, 15);
+    const t = '这天还没有排班';
+    ctx.fillText(t, (W - ctx.measureText(t).width) / 2, y + 48);
+    y += 96;
+  }
+
+  for (const g of groups) {
+    // 时段标题
+    const timeText = g.start && g.end ? `${g.start} – ${g.end}` : '时间待定';
+    ctx.fillStyle = '#1a1a19';
+    ctx.font = font(700, 21);
+    ctx.fillText(timeText, PAD, y + 22);
+    const tw = ctx.measureText(timeText).width;
+
+    ctx.fillStyle = '#8a8883';
+    ctx.font = font(400, 13);
+    if (g.start && g.end) ctx.fillText(`${fmtNum(g.hours)} 小时`, PAD + tw + 14, y + 21);
+
+    // 人数徽标（右侧）
+    const badge = `${g.items.length} 人`;
+    ctx.font = font(600, 12.5);
+    const bw = ctx.measureText(badge).width + 24;
+    ctx.fillStyle = '#e8f0fc';
+    roundRectPath(ctx, W - PAD - bw, y + 2, bw, 26, 13);
+    ctx.fill();
+    ctx.fillStyle = '#2a6fd0';
+    ctx.fillText(badge, W - PAD - bw + 12, y + 20);
+
+    y += 34;
+    // 人员卡片
+    g.items.forEach((a, idx) => {
+      const col = idx % peopleCols;
+      const row = Math.floor(idx / peopleCols);
+      const x = PAD + col * (cardW + cardGap);
+      const cy = y + row * (cardH + cardGap);
+
+      ctx.fillStyle = '#f5f4f0';
+      roundRectPath(ctx, x, cy, cardW, cardH, 9);
+      ctx.fill();
+
+      const e = empById()[a.employee_id] || { name: a.name };
+
+      // 姓名
+      ctx.fillStyle = '#1a1a19';
+      ctx.font = font(600, 16);
+      const pad = 14;
+      const nameW = ctx.measureText(e.name).width;
+      ctx.fillText(e.name, x + pad, cy + cardH / 2 + 6);
+
+      // 工作内容（靠右，超长省略）
+      const work = a.content || '';
+      if (work) {
+        ctx.font = font(400, 13.5);
+        const avail = cardW - pad * 2 - nameW - 10;
+        let txt = work;
+        if (ctx.measureText(txt).width > avail) {
+          while (txt.length && ctx.measureText(txt + '…').width > avail) txt = txt.slice(0, -1);
+          txt += '…';
+        }
+        ctx.fillStyle = '#6b6b66';
+        ctx.fillText(txt, x + cardW - pad - ctx.measureText(txt).width, cy + cardH / 2 + 5);
+      }
+    });
+    y += Math.ceil(g.items.length / peopleCols) * (cardH + cardGap) + 6;
+
+    // 组间虚线
+    if (g !== groups[groups.length - 1]) {
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = '#e4e3dd';
+      ctx.beginPath();
+      ctx.moveTo(PAD, y + 4);
+      ctx.lineTo(W - PAD, y + 4);
+      ctx.stroke();
+      ctx.restore();
+    }
+    y += 18;
+  }
+
+  // ---- 休息名单
+  if (restLines.length) {
+    ctx.strokeStyle = '#ecebe5';
+    ctx.beginPath();
+    ctx.moveTo(PAD, y);
+    ctx.lineTo(W - PAD, y);
+    ctx.stroke();
+    y += 22;
+
+    ctx.fillStyle = '#f0efea';
+    ctx.font = font(600, 12);
+    const lw = ctx.measureText('休息').width + 22;
+    roundRectPath(ctx, PAD, y, lw, 24, 12);
+    ctx.fill();
+    ctx.fillStyle = '#6b6b66';
+    ctx.fillText('休息', PAD + 11, y + 17);
+
+    ctx.font = font(400, 13.5);
+    ctx.fillStyle = '#9a9893';
+    restLines.forEach((ln, i) => {
+      ctx.fillText(ln, PAD + 60, y + 17 + i * 20);
+    });
+    y += restLines.length * 20 + 4;
+  }
+
+  // ---- 页脚
+  const fy = H - 40;
+  ctx.strokeStyle = '#ecebe5';
+  ctx.beginPath();
+  ctx.moveTo(PAD, fy);
+  ctx.lineTo(W - PAD, fy);
+  ctx.stroke();
+  ctx.fillStyle = '#a3a19b';
+  ctx.font = font(400, 11.5);
+  ctx.fillText(orgName, PAD, fy + 18);
+  ctx.fillText(target, W - PAD - ctx.measureText(target).width, fy + 18);
+
+  return c;
+}
+
+/** 导出当天排班看板为 PNG，可直接发到群里 */
+async function exportDayImage(date) {
+  const target = date;
+  const d = parseISO(target);
+  const assigns = (state.schedule?.assignments || [])
+    .filter((a) => a.date === target)
+    .sort((a, b) => (a.start || '99').localeCompare(b.start || '99'));
+  const groups = groupBySlot(assigns);
+  const noAssign = state.employees.filter((e) => !assigns.some((a) => a.employee_id === e.id));
+  const dayCol = state.calendar?.days?.find?.((x) => x.date === target);
+  const isRest = dayCol ? dayCol.is_workday === false : false;
+  const orgName = state.settings.org_name || '排班管理';
+
+  try {
+    const canvas = drawDaySheetCanvas(target, d, assigns, groups, noAssign, orgName, isRest);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+    if (!blob) throw new Error('无法生成图片');
+    downloadBlob(blob, `排班-${target}.png`, 'image/png');
+    toast('图片已生成，可直接发到群里（手机在「文件/下载」里）');
+  } catch (e) {
+    toast('图片导出失败：' + e.message, true);
+  }
+}
+
 function openAddPersonToDay(date) {
   const assigned = new Set((state.schedule.assignments || [])
     .filter((a) => a.date === date).map((a) => a.employee_id));

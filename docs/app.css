@@ -186,8 +186,8 @@ main { padding: 20px 16px 64px; max-width: 1280px; margin: 0 auto; overflow-x: h
   display: flex; align-items: center; gap: 12px;
   padding: 16px 18px 12px;
 }
-.card-head h2 { font-size: 15px; }
-.card-head .sub { color: var(--text-muted); font-size: 12.5px; }
+.card-head h2 { font-size: 15px; white-space: nowrap; }
+.card-head .sub { color: var(--text-muted); font-size: 12.5px; min-width: 0; }
 .card-head .spacer { margin-left: auto; }
 .card-body { padding: 0 18px 18px; }
 
@@ -458,6 +458,112 @@ th.offday .sched-day .d { color: var(--text-muted); }
 .sched-foot b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
 /* ---------------------------------------------------------------- 今日视图 */
+/* 排班看板：按时间段分组，适合直接截图发群 */
+.day-sheet {
+  margin-bottom: 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,.04));
+}
+.sheet-head {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--grid);
+  background: var(--surface-2);
+}
+.sheet-title-row { display: flex; align-items: flex-start; gap: 12px; }
+.sheet-org {
+  font-size: 12.5px; color: var(--text-muted); font-weight: 500;
+  letter-spacing: .04em; margin-bottom: 2px;
+}
+.sheet-title {
+  font-size: 26px; font-weight: 700; letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 10px;
+}
+.sheet-week { font-size: 15px; font-weight: 500; color: var(--text-secondary); }
+.sheet-badge {
+  margin-left: auto; font-size: 12px; font-weight: 600;
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--surface-3); color: var(--text-secondary);
+}
+.sheet-meta {
+  display: flex; gap: 22px; margin-top: 12px; flex-wrap: wrap;
+  font-size: 13px; color: var(--text-secondary);
+}
+.sheet-meta b { color: var(--text-primary); font-size: 15px; font-variant-numeric: tabular-nums; }
+
+.sheet-body { padding: 8px 24px 16px; }
+.slot-group { border-bottom: 1px dashed var(--grid); padding: 14px 0; }
+.slot-group:last-child { border-bottom: 0; }
+.slot-group-head {
+  display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px;
+}
+.slot-group-time {
+  font-size: 19px; font-weight: 700; letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums; color: var(--text-primary);
+}
+.slot-group-sub { font-size: 12.5px; color: var(--text-muted); }
+.slot-group-count {
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font-weight: 600;
+}
+.slot-group-people {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+.slot-person {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; border-radius: 9px;
+  background: var(--surface-2); cursor: pointer;
+  border: 1px solid transparent; transition: border-color .12s;
+  min-width: 0; min-height: 44px;
+}
+.slot-person:hover { border-color: var(--border-strong); }
+.slot-person-name {
+  font-size: 15px; font-weight: 600; white-space: nowrap; flex: none;
+}
+.slot-person-work {
+  margin-left: auto; padding-left: 12px;
+  font-size: 13px; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.slot-person-work.muted { color: var(--text-muted); }
+
+.sheet-empty { text-align: center; padding: 40px 0; color: var(--text-muted); }
+.sheet-empty-icon { font-size: 28px; margin-bottom: 8px; }
+
+.sheet-rest {
+  display: flex; gap: 12px; align-items: baseline;
+  padding: 12px 24px; border-top: 1px solid var(--grid); background: var(--surface-2);
+}
+.sheet-rest-label {
+  flex: none; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  padding: 2px 9px; border-radius: 999px; background: var(--surface-3);
+}
+.sheet-rest-names { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+.sheet-foot {
+  display: flex; justify-content: space-between;
+  padding: 10px 24px; font-size: 11.5px; color: var(--text-muted);
+  border-top: 1px solid var(--grid); background: var(--surface-2);
+}
+
+@media (max-width: 640px) {
+  .sheet-head { padding: 16px 18px 12px; }
+  .sheet-body { padding: 4px 18px 12px; }
+  .sheet-title { font-size: 22px; }
+  .sheet-meta { gap: 14px; }
+  .slot-group-people { grid-template-columns: 1fr; }
+  .sheet-rest, .sheet-foot { padding-left: 18px; padding-right: 18px; }
+}
+
+@media print {
+  .no-print, .topbar, .range-bar.no-print { display: none !important; }
+  .day-sheet { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+  body { background: #fff; }
+}
+
 .day-layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
 @media (max-width: 900px) { .day-layout { grid-template-columns: 1fr; } }
 .shift-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
