@@ -1259,11 +1259,10 @@ function openShiftPicker(date, empId) {
         $('#slotTotal', root).innerHTML = `合计 <b>${fmtNum(totalHours())}</b> 小时`;
       }
 
-      // 关闭后刷新月视图
-      const btnClose = $('.modal-foot [data-close]', root);
-      btnClose?.addEventListener('click', () => setTimeout(() => renderMonth(), 0));
-      const headClose = $('.modal-head [data-close]', root);
-      headClose?.addEventListener('click', () => setTimeout(() => renderMonth(), 0));
+      // 关闭后刷新当前所在的页面（月排班 / 今日 / …），不要一律跳回月排班
+      const refreshAfterClose = () => setTimeout(() => renderCurrentView(), 0);
+      $('.modal-foot [data-close]', root)?.addEventListener('click', refreshAfterClose);
+      $('.modal-head [data-close]', root)?.addEventListener('click', refreshAfterClose);
     },
     });
 }
@@ -2068,7 +2067,7 @@ function openAddPersonToDay(date) {
         setTimeout(() => openShiftPicker(date, id), 0);
       }));
       root.querySelector('.modal-foot [data-close]')?.addEventListener('click', () => {
-        setTimeout(() => renderDay(), 0);
+        setTimeout(() => renderCurrentView(), 0);
       });
     },
   });
@@ -2509,13 +2508,7 @@ function openImportWizard() {
           nextBtn.disabled = false;
           await loadBootstrap();
           toast('导入完成');
-          setTimeout(() => {
-            close();
-            if (state.view === 'dashboard') renderDashboard();
-            else if (state.view === 'month') renderMonth();
-            else if (state.view === 'day') renderDay();
-            else renderPeople();
-          }, 900);
+          setTimeout(() => { close(); renderCurrentView(); }, 900);
         } catch (e) {
           wizBody.innerHTML = `<div class="empty"><h3>导入失败</h3><p>${esc(e.message)}</p></div>`;
           nextBtn.disabled = false;
@@ -2571,7 +2564,7 @@ function openRestore() {
           await api('/restore', { method: 'POST', body: { confirm: true, data } });
           status.innerHTML = '<span style="color:var(--good-text);font-weight:600">✓ 恢复完成</span>';
           await loadBootstrap();
-          setTimeout(() => { close(); renderPeople(); }, 700);
+          setTimeout(() => { close(); renderCurrentView(); }, 700);
         } catch (e) {
           status.innerHTML = `<span style="color:var(--critical)">${esc(e.message)}</span>`;
         }
@@ -2743,6 +2736,12 @@ function setView(view) {
   state.calendarEdit = false;
   $$('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.view === view)));
   if (location.hash !== '#' + view) location.hash = view;
+  renderCurrentView();
+}
+
+/** 重新渲染当前页面（不切换视图、不改 hash） */
+function renderCurrentView() {
+  const view = state.view;
   if (view === 'dashboard') renderDashboard();
   else if (view === 'month') renderMonth();
   else if (view === 'day') renderDay();
