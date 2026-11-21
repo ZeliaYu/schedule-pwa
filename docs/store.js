@@ -26,6 +26,7 @@ const EMPTY_STATE = () => ({
     daily_hours: 8,               // 每人每天标准工时，用于算应出勤
     stats_start_date: '',
     org_name: '排班管理',
+    content_options: '',          // 工作内容预设，逗号分隔；留空则从已有排班自动汇总
   },
   nextIds: { employee: 1, assignment: 1, adjustment: 1 },
 });

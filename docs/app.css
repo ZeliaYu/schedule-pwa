@@ -447,6 +447,62 @@ th.offday .sched-day .d { color: var(--text-muted); }
 
 .map-hours { display: flex; align-items: center; gap: 6px; }
 .map-hours .unit { font-size: 12px; color: var(--text-muted); }
+
+/* 工作内容选择器：预设胶囊 + 输入框 */
+.content-picker { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.content-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.content-chip {
+  height: 26px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--surface-1);
+  color: var(--text-secondary); font-size: 12px; cursor: pointer;
+  white-space: nowrap; transition: background .12s, border-color .12s, color .12s;
+}
+.content-chip:hover { background: var(--surface-2); color: var(--text-primary); }
+.content-chip.active {
+  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600;
+}
+.content-chip.add { border-style: dashed; color: var(--text-muted); }
+.content-chip.add:hover { color: var(--accent); border-color: var(--accent); }
+.content-input { height: 32px; }
+.slot-content-wrap { min-width: 0; }
+.content-select { height: 34px; width: 100%; }
+
+/* 简易输入浮层：可以叠在别的弹窗上 */
+.ask-overlay { z-index: 60; }
+.ask-modal { max-width: 380px; }
+
+/* 批量排班 */
+.batch-h { font-size: 13px; margin: 0 0 8px; }
+.batch-people {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 6px; max-height: 220px; overflow-y: auto;
+}
+.batch-person {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-1); cursor: pointer; min-width: 0;
+}
+.batch-person:hover { border-color: var(--border-strong); }
+.batch-person input { margin: 0; flex: none; }
+.batch-person .bp-name {
+  font-size: 13.5px; font-weight: 500; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.batch-person .bp-flag {
+  margin-left: auto; flex: none; font-size: 10px; padding: 0 6px;
+  border-radius: 999px; background: var(--surface-3); color: var(--text-muted);
+}
+.batch-person:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-1));
+}
+.batch-extra-list { display: flex; flex-direction: column; gap: 6px; }
+.batch-extra-row { display: flex; align-items: center; gap: 10px; }
+.batch-extra-row .be-name {
+  width: 96px; flex: none; font-size: 13.5px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.batch-extra-row .be-content { height: 32px; flex: 1; min-width: 0; }
 .cell.sel { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
 .cell-rest { color: var(--text-muted); font-size: 11.5px; }
 

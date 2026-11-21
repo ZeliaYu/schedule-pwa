@@ -102,6 +102,198 @@ function slotTitle(a) {
 /** 当天排班合计工时 */
 const dayHours = (list) => (list || []).reduce((s, a) => s + (Number(a.hours) || 0), 0);
 
+/* ------------------------------------------------------------ 工作内容预设
+   统一存在 settings.content_options（逗号分隔）。留空则从历史排班里自动汇总。
+*/
+function splitOptions(raw) {
+  return String(raw || '')
+    .split(/[,，、\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** 可选的工作内容：预设优先，没有预设时汇总已有排班 */
+function contentOptions() {
+  const preset = splitOptions(state.settings?.content_options);
+  if (preset.length) {
+    // 去重并保持顺序
+    return [...new Set(preset)];
+  }
+  const seen = new Map();
+  for (const a of store?.state?.assignments || []) {
+    const c = String(a.content || '').trim();
+    if (c) seen.set(c, (seen.get(c) || 0) + 1);
+  }
+  return [...seen.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+}
+
+/** 把工作内容加进预设（已有则忽略） */
+async function rememberContent(content) {
+  const c = String(content || '').trim();
+  if (!c) return;
+  const list = splitOptions(state.settings?.content_options);
+  if (list.includes(c)) return;
+  list.push(c);
+  try {
+    state.settings = await api('/settings', { method: 'PUT', body: { content_options: list.join(',') } });
+  } catch { /* 失败不阻断排班 */ }
+}
+
+/**
+ * 简易输入对话框（替代 prompt，手机上也好看）
+ * 独立浮层，不占用 #modalRoot，因此可以在别的弹窗上面再开一层。
+ * @returns {Promise<string|null>} 取消返回 null
+ */
+function askText(title, defaultValue = '', placeholder = '') {
+  return new Promise((resolve) => {
+    let settled = false;
+    const wrap = document.createElement('div');
+    wrap.className = 'modal-backdrop ask-overlay';
+    wrap.innerHTML = `
+      <div class="modal ask-modal" role="dialog" aria-modal="true">
+        <div class="modal-head"><div><h3>${esc(title)}</h3></div></div>
+        <div class="modal-body">
+          <input class="input" id="askTextInput" value="${esc(defaultValue)}"
+                 placeholder="${esc(placeholder)}" autocomplete="off">
+        </div>
+        <div class="modal-foot">
+          <button class="btn" data-ask-cancel>取消</button>
+          <button class="btn primary" data-ask-ok>确定</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+
+    const input = $('#askTextInput', wrap);
+    const finish = (v) => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener('keydown', onKey);
+      wrap.remove();
+      resolve(v);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(null); };
+    document.addEventListener('keydown', onKey);
+
+    wrap.addEventListener('click', (e) => {
+      if (e.target === wrap) finish(null);
+    });
+    $('[data-ask-cancel]', wrap).addEventListener('click', () => finish(null));
+    $('[data-ask-ok]', wrap).addEventListener('click', () => finish(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(input.value); }
+    });
+    setTimeout(() => { input.focus(); input.select(); }, 50);
+  });
+}
+
+/** 紧凑版工作内容选择器：下拉框（用于已有条目那一行） */
+function contentSelectHtml(id, current) {
+  const opts = contentOptions();
+  const cur = String(current || '');
+  const list = cur && !opts.includes(cur) ? [cur, ...opts] : opts;
+  return `
+    <select class="input content-select" id="${id}">
+      <option value="">— 未填 —</option>
+      ${list.map((c) => `<option value="${esc(c)}"${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('')}
+      <option value="__new__">＋ 新增内容…</option>
+    </select>`;
+}
+
+/** 绑定下拉选择器：选「新增内容」时提示输入并加入预设 */
+function bindContentSelect(root, id, onChange) {
+  const sel = $(`#${id}`, root);
+  if (!sel) return;
+  sel.addEventListener('change', async () => {
+    if (sel.value === '__new__') {
+      const v = await askText('新增工作内容', '', '如：巡检 / 清洗设备');
+      const name = String(v || '').trim();
+      if (!v || !name) { sel.value = sel.dataset.prev || ''; return; }
+      await rememberContent(name);
+      // 插到「新增内容」之前，并选中
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.insertBefore(opt, sel.querySelector('option[value="__new__"]'));
+      sel.value = name;
+    }
+    sel.dataset.prev = sel.value;
+    if (onChange) onChange(sel.value);
+  });
+}
+
+/** 工作内容选择器（胶囊 + 输入框） */
+function contentPickerHtml(id, current, extraClass = '') {
+  const opts = contentOptions();
+  return `
+    <div class="content-picker ${extraClass}">
+      <div class="content-chips" data-content-chips="${id}">
+        ${opts.map((c) => `
+          <button type="button" class="content-chip${c === current ? ' active' : ''}" data-content-value="${esc(c)}">${esc(c)}</button>`).join('')}
+        <button type="button" class="content-chip add" data-content-add="${id}" title="新增工作内容">+ 新增</button>
+      </div>
+      <input class="input content-input" id="${id}" value="${esc(current || '')}"
+             placeholder="直接输入也行，回车可存为常用" autocomplete="off">
+    </div>`;
+}
+
+/** 绑定工作内容选择器的事件 */
+function bindContentPicker(root, id, onChange) {
+  const input = $(`#${id}`, root);
+  const chips = $(`[data-content-chips="${id}"]`, root);
+  if (!input || !chips) return;
+
+  const markActive = () => {
+    const v = input.value.trim();
+    $$('.content-chip', chips).forEach((b) => {
+      if (b.dataset.contentValue !== undefined) {
+        b.classList.toggle('active', b.dataset.contentValue === v);
+      }
+    });
+  };
+
+  chips.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.content-chip');
+    if (!btn) return;
+    if (btn.dataset.contentAdd !== undefined) {
+      const v = input.value.trim();
+      if (!v) { input.focus(); return; }
+      await rememberContent(v);
+      // 追加一个新胶囊
+      const addBtn = $('[data-content-add]', chips);
+      if (!$$(`[data-content-value="${CSS.escape(v)}"]`, chips).length) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'content-chip';
+        chip.dataset.contentValue = v;
+        chip.textContent = v;
+        chips.insertBefore(chip, addBtn);
+      }
+      markActive();
+      toast(`已把「${v}」加入常用`);
+      return;
+    }
+    if (btn.dataset.contentValue !== undefined) {
+      input.value = btn.dataset.contentValue;
+      markActive();
+      if (onChange) onChange(input.value);
+    }
+  });
+
+  input.addEventListener('input', markActive);
+  input.addEventListener('change', () => { if (onChange) onChange(input.value); });
+  // 回车：若无完全匹配，顺便存为常用
+  input.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const v = input.value.trim();
+    if (!v) return;
+    await rememberContent(v);
+    markActive();
+    if (onChange) onChange(v);
+  });
+  markActive();
+}
+
 /* ------------------------------------------------------------ 提示 & 模态 */
 let toastTimer = null;
 let barObserver = null;
@@ -1136,7 +1328,7 @@ function openShiftPicker(date, empId) {
         <input class="input" type="number" step="0.5" min="0.5" data-slot-hours value="${fmtNum(a.hours)}">
         <span class="unit">小时</span>
       </div>
-      <input class="input slot-content" data-slot-content value="${esc(a.content || '')}" placeholder="干什么活，如：理瓶">
+      <div class="slot-content-wrap">${contentSelectHtml(`slotc-${a.id}`, a.content || '')}</div>
       <button class="icon-btn slot-del" data-slot-del title="删除这条" aria-label="删除">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -1158,7 +1350,7 @@ function openShiftPicker(date, empId) {
           <div class="field"><label>开始</label><input class="input" type="time" id="newStart" value="08:00"></div>
           <div class="field"><label>结束</label><input class="input" type="time" id="newEnd" value="16:00"></div>
           <div class="field"><label>工时</label><input class="input" type="number" step="0.5" min="0.5" id="newHours" value="8"></div>
-          <div class="field slot-add-content"><label>工作内容</label><input class="input" id="newContent" placeholder="如：理瓶 / 灌装 / 包装"></div>
+          <div class="field slot-add-content"><label>工作内容</label>${contentPickerHtml('newContent', '')}</div>
         </div>
         <div class="hint-box" style="margin-top:10px">
           改了起止时间，工时会自动按时间差算；也可以直接手改工时（比如中间休息要扣掉）。
@@ -1197,7 +1389,7 @@ function openShiftPicker(date, empId) {
           const s = $('[data-slot-start]', row).value;
           const e = $('[data-slot-end]', row).value;
           const h = Number($('[data-slot-hours]', row).value);
-          const content = $('[data-slot-content]', row).value;
+          const content = ($('.content-select', row).value || '').trim();
           if (!(h > 0)) { toast('工时需大于 0', true); return; }
           try {
             await api(`/schedule/${id}`, { method: 'PUT', body: { start: s, end: e, hours: h, content } });
@@ -1210,7 +1402,7 @@ function openShiftPicker(date, empId) {
         $('[data-slot-start]', row).addEventListener('change', save);
         $('[data-slot-end]', row).addEventListener('change', save);
         $('[data-slot-hours]', row).addEventListener('change', save);
-        $('[data-slot-content]', row).addEventListener('change', save);
+        bindContentSelect(row, `slotc-${id}`, () => save());
         $('[data-slot-del]', row).addEventListener('click', async () => {
           try {
             await api(`/schedule/${id}`, { method: 'DELETE' });
@@ -1232,10 +1424,11 @@ function openShiftPicker(date, empId) {
         try {
           const row = await api('/schedule', {
             method: 'POST',
-            body: { date, employee_id: empId, start: s, end: e, hours: h, content: $('#newContent', root).value.trim() },
+            body: { date, employee_id: empId, start: s, end: e, hours: h, content: ($('#newContent', root)?.value || '').trim() },
           });
           list.push(row);
-          $('#newContent', root).value = '';
+          const nc = $('#newContent', root);
+          if (nc) nc.value = '';
           renderList();
           toast('已添加');
         } catch (err) { toast(err.message, true); }
@@ -1258,6 +1451,9 @@ function openShiftPicker(date, empId) {
         $$('.slot-row', root).forEach(bindSlot);
         $('#slotTotal', root).innerHTML = `合计 <b>${fmtNum(totalHours())}</b> 小时`;
       }
+
+      // 「新增一条」里的工作内容选择器
+      bindContentPicker(root, 'newContent');
 
       // 关闭后刷新当前所在的页面（月排班 / 今日 / …），不要一律跳回月排班
       const refreshAfterClose = () => setTimeout(() => renderCurrentView(), 0);
@@ -1606,7 +1802,10 @@ async function renderDay() {
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
           导出图片
         </button>
-        <button class="btn sm primary" id="addShiftBtn">+ 排班</button>
+        <button class="btn sm primary" id="addShiftBtn">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+          批量排班
+        </button>
       </div>
     </div>
 
@@ -2046,28 +2245,166 @@ async function exportDayImage(date) {
   }
 }
 
+/**
+ * 批量排班：一次选择多人，统一设置时段 / 工时 / 工作内容；
+ * 也可以给选中的人单独指定不同的工作内容。
+ */
 function openAddPersonToDay(date) {
-  const assigned = new Set((state.schedule.assignments || [])
-    .filter((a) => a.date === date).map((a) => a.employee_id));
+  const d = parseISO(date);
+  const isWork = state.calendar?.days?.find?.((x) => x.date === date)?.is_workday ?? true;
+  const std = Number(state.settings.daily_hours) || 8;
+  const existing = (state.schedule.assignments || []).filter((a) => a.date === date);
+  const assignedIds = new Set(existing.map((a) => a.employee_id));
+  const hidden = new Set(state.employees.filter((e) => e.hidden).map((e) => e.id));
+  const people = state.employees.filter((e) => !hidden.has(e.id));
+
+  // 预选：当天还没有排班的人
+  const picked = new Set(people.filter((e) => !assignedIds.has(e.id)).map((e) => e.id));
+  // 每人单独填写的工作内容
+  const batchOwn = {};
+
   openModal({
-    title: '选择人员排班',
-    sub: date,
-    body: `<div style="display:flex;flex-wrap:wrap;gap:8px">
-      ${state.employees.map((e) => `
-        <button class="btn" data-add-emp="${e.id}" style="${assigned.has(e.id) ? 'border-color:var(--accent);color:var(--accent)' : ''}">
-          ${assigned.has(e.id) ? '✓ ' : ''}${esc(e.name)}
-        </button>`).join('')}
-    </div>
-    <div class="hint-box" style="margin-top:14px">点人名进入时段编辑，可以填开始时间、结束时间和工作内容。</div>`,
-    footer: `<button class="btn" data-close>完成</button>`,
+    title: '批量排班',
+    sub: `${date} ${weekdayCN(d)} · ${isWork ? '工作日' : '休息日（上班算加班）'}`,
+    wide: true,
+    body: `
+      <h4 class="batch-h">1. 选择人员</h4>
+      <div class="pp-toolbar" style="margin-bottom:8px">
+        <button class="btn sm ghost" id="batchAll">全选</button>
+        <button class="btn sm ghost" id="batchNone">全不选</button>
+        <button class="btn sm ghost" id="batchUnassigned">只选还没排的</button>
+        <span class="pp-count" id="batchCount"></span>
+      </div>
+      <div class="batch-people" id="batchPeople">
+        ${people.map((e) => `
+          <label class="batch-person${assignedIds.has(e.id) ? ' has-slot' : ''}">
+            <input type="checkbox" data-batch-check="${e.id}" ${picked.has(e.id) ? 'checked' : ''}>
+            <span class="bp-name">${esc(e.name)}</span>
+            ${assignedIds.has(e.id) ? '<span class="bp-flag">已有</span>' : ''}
+          </label>`).join('')}
+      </div>
+
+      <h4 class="batch-h" style="margin-top:18px">2. 时段与工作内容</h4>
+      <div class="slot-add-grid">
+        <div class="field"><label>开始</label><input class="input" type="time" id="batchStart" value="08:00"></div>
+        <div class="field"><label>结束</label><input class="input" type="time" id="batchEnd" value="16:00"></div>
+        <div class="field"><label>工时</label><input class="input" type="number" step="0.5" min="0.5" id="batchHours" value="${fmtNum(std)}"></div>
+        <div class="field slot-add-content"><label>工作内容</label>${contentPickerHtml('batchContent', '')}</div>
+      </div>
+      <div class="hint-box" style="margin-top:10px">
+        <div>常用时段：
+          ${[['08:00', '16:00'], ['16:00', '24:00'], ['08:00', '12:00'], ['08:00', '20:00']].map(([st, en]) => {
+            const h = hoursBetweenStr(st, en);
+            return `<button class="btn sm ghost" data-batch-quick="${st}-${en}">${st}-${en}（${fmtNum(h)}h）</button>`;
+          }).join('')}
+        </div>
+        <label class="switch" style="margin-top:8px">
+          <input type="checkbox" id="batchReplace" checked> 覆盖当天已有排班（同一个人先清空再写入）
+        </label>
+      </div>
+
+      <div class="batch-extra" id="batchExtra"></div>
+    `,
+    footer: `<button class="btn" data-close>取消</button>
+      <button class="btn primary" id="batchApply">排班</button>`,
     onMount: (root, close) => {
-      $$('[data-add-emp]', root).forEach((btn) => btn.addEventListener('click', () => {
-        const id = Number(btn.dataset.addEmp);
-        close();
-        setTimeout(() => openShiftPicker(date, id), 0);
+      const startEl = $('#batchStart', root), endEl = $('#batchEnd', root), hoursEl = $('#batchHours', root);
+      const syncHours = () => {
+        const h = hoursBetweenStr(startEl.value, endEl.value);
+        if (h > 0) hoursEl.value = fmtNum(h);
+      };
+      startEl.addEventListener('change', syncHours);
+      endEl.addEventListener('change', syncHours);
+      $$('[data-batch-quick]', root).forEach((b) => b.addEventListener('click', () => {
+        const [st, en] = b.dataset.batchQuick.split('-');
+        startEl.value = st; endEl.value = en; syncHours();
       }));
-      root.querySelector('.modal-foot [data-close]')?.addEventListener('click', () => {
-        setTimeout(() => renderCurrentView(), 0);
+
+      bindContentPicker(root, 'batchContent');
+
+      const checks = () => $$('[data-batch-check]', root);
+      const selectedIds = () => checks().filter((c) => c.checked).map((c) => Number(c.dataset.batchCheck));
+      const byId = empById();
+
+      // 「分别指定」区域：给已选的人单独填工作内容
+      function renderExtra() {
+        const ids = selectedIds();
+        const box = $('#batchExtra', root);
+        if (!box) return;
+        if (!ids.length) { box.innerHTML = ''; return; }
+        box.innerHTML = `
+          <h4 class="batch-h" style="margin-top:18px">3. 分别指定（可留空，用上面的统一内容）</h4>
+          <div class="batch-extra-list">
+            ${ids.map((id) => `
+              <div class="batch-extra-row">
+                <span class="be-name">${esc(byId[id]?.name || '')}</span>
+                <input class="input be-content" data-batch-own="${id}" placeholder="留空 = 用统一内容"
+                       list="contentOptionsList" value="${esc(batchOwn[id] || '')}">
+              </div>`).join('')}
+          </div>
+          <datalist id="contentOptionsList">
+            ${contentOptions().map((c) => `<option value="${esc(c)}"></option>`).join('')}
+          </datalist>`;
+        $$('[data-batch-own]', box).forEach((inp) => {
+          inp.addEventListener('input', () => { batchOwn[Number(inp.dataset.batchOwn)] = inp.value; });
+        });
+      }
+
+      const refreshCount = () => {
+        const all = checks();
+        const n = all.filter((c) => c.checked).length;
+        const el = $('#batchCount', root);
+        if (el) el.textContent = `已选 ${n} / ${all.length} 人`;
+        renderExtra();
+      };
+
+      $('#batchAll', root).addEventListener('click', () => {
+        checks().forEach((c) => { c.checked = true; }); refreshCount();
+      });
+      $('#batchNone', root).addEventListener('click', () => {
+        checks().forEach((c) => { c.checked = false; }); refreshCount();
+      });
+      $('#batchUnassigned', root).addEventListener('click', () => {
+        checks().forEach((c) => { c.checked = !assignedIds.has(Number(c.dataset.batchCheck)); });
+        refreshCount();
+      });
+      checks().forEach((c) => c.addEventListener('change', refreshCount));
+      refreshCount();
+
+      $('#batchApply', root).addEventListener('click', async () => {
+        const ids = selectedIds();
+        if (!ids.length) { toast('先选择人员', true); return; }
+        const st = startEl.value, en = endEl.value;
+        const h = Number(hoursEl.value) || hoursBetweenStr(st, en);
+        if (!(h > 0)) { toast('请填写工时或时间段', true); return; }
+        const common = ($('#batchContent', root)?.value || '').trim();
+        const replace = $('#batchReplace', root).checked;
+        const btn = $('#batchApply', root);
+        btn.disabled = true;
+        btn.textContent = '正在写入…';
+        try {
+          let count = 0;
+          for (const id of ids) {
+            if (replace) {
+              await api(`/schedule?date=${date}&employee_id=${id}`, { method: 'DELETE' });
+            }
+            const own = batchOwn[id];
+            const content = (own !== undefined && own.trim()) ? own.trim() : common;
+            await api('/schedule', {
+              method: 'POST',
+              body: { date, employee_id: id, start: st, end: en, hours: h, content },
+            });
+            count++;
+            if (content) await rememberContent(content);
+          }
+          close();
+          toast(`已为 ${count} 人排班`);
+          setTimeout(() => renderCurrentView(), 0);
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = '排班';
+          toast(err.message, true);
+        }
       });
     },
   });
@@ -2147,6 +2484,32 @@ async function renderPeople() {
       </div>
 
       <div class="card">
+        <div class="card-head">
+          <h2>工作内容</h2>
+          <span class="sub">排班时可直接选</span>
+        </div>
+        <div class="card-body">
+          <div class="content-chips" id="contentOptList" style="margin-bottom:10px">
+            ${contentOptions().map((c) => `
+              <span class="content-chip active" style="cursor:default">
+                ${esc(c)}
+                <button class="icon-btn" data-del-content="${esc(c)}" title="删除"
+                        style="width:16px;height:16px;margin-left:4px;color:rgba(255,255,255,.85)" aria-label="删除">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+              </span>`).join('') || '<span style="font-size:12.5px;color:var(--text-muted)">还没有常用内容</span>'}
+          </div>
+          <div style="display:flex;gap:8px">
+            <input class="input" id="newContentOpt" placeholder="如：理瓶 / 灌装" style="height:34px">
+            <button class="btn sm primary" id="addContentOpt" style="height:34px">添加</button>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
+            这里的内容会出现在排班时的选项里；没设置时自动用历史排班里出现过的内容。
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-head"><h2>数据</h2></div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
           <button class="btn" id="btnBackup">导出备份（JSON）</button>
@@ -2204,6 +2567,35 @@ async function renderPeople() {
       toast('统计口径已保存');
     } catch (e) { toast(e.message, true); }
   });
+
+  // 工作内容预设：添加 / 删除
+  const saveOptions = async (list) => {
+    state.settings = await api('/settings', { method: 'PUT', body: { content_options: list.join(',') } });
+    renderPeople();
+  };
+  $('#addContentOpt')?.addEventListener('click', async () => {
+    const input = $('#newContentOpt');
+    const v = input.value.trim();
+    if (!v) { input.focus(); return; }
+    const list = contentOptions();
+    if (list.includes(v)) { toast('已经有了', true); return; }
+    list.push(v);
+    try {
+      await saveOptions(list);
+      toast(`已添加「${v}」`);
+    } catch (e) { toast(e.message, true); }
+  });
+  $('#newContentOpt')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); $('#addContentOpt').click(); }
+  });
+  $$('[data-del-content]').forEach((b) => b.addEventListener('click', async () => {
+    const v = b.dataset.delContent;
+    const list = contentOptions().filter((c) => c !== v);
+    try {
+      await saveOptions(list);
+      toast(`已删除「${v}」`);
+    } catch (e) { toast(e.message, true); }
+  }));
 
   $('#btnBackup').addEventListener('click', downloadBackup);
   $('#btnRestore').addEventListener('click', openRestore);
