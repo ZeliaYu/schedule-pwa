@@ -229,7 +229,7 @@ tools/make_backup.js   从 Excel 生成可恢复的备份 JSON
 node tests/stats_vs_python.js   # 统计计算 40 项
 node tests/parse_vs_python.js   # 解析/导入 37 项
 node tests/migrate_v1_v2.js     # 旧数据（班次）迁移到工时 11 项
-node tests/leave_check.js       # 调休 / 请假口径 8 项
+python tests/leave_check.py     # 调休 / 请假口径 8 项 + 与 Python 结果对照
 ```
 
 统计逻辑最早由 Python 后端实现，现在改用 `tests/gen_expected.py`
