@@ -584,15 +584,37 @@ function lineChart(container, series, labels, opts = {}) {
 }
 
 /** 热力图：人员 × 日期，单元格按班次着色（堆叠） */
+/** 工时档位：不足 / 正常（±25% 内）/ 超时 */
+function hoursTier(hours, std) {
+  const s = Number(std) > 0 ? Number(std) : 8;
+  if (!(hours > 0)) return null;
+  if (hours < s * 0.75) return 'low';
+  if (hours > s * 1.25) return 'high';
+  return 'ok';
+}
+
+const TIER_META = {
+  low: { label: '不足', var: '--tier-low' },
+  ok: { label: '正常', var: '--tier-ok' },
+  high: { label: '超时', var: '--tier-high' },
+};
+
+/**
+ * 排班密度：人员 × 日期
+ * 三档离散配色（不足 / 正常 / 超时），色盲可辨；
+ * 每格直接标工时，颜色不是唯一线索。
+ */
 function heatmap(container, data) {
   container.innerHTML = '';
   const emps = data.employees;
   const days = data.days;
   if (!emps.length || !days.length) { container.innerHTML = '<div class="empty">暂无数据</div>'; return; }
 
-  const cellW = 22, cellH = 26, gap = 2;
-  const nameW = 104;
-  const headH = 38;
+  const std = data.daily_hours || 8;
+  // 手机上横向滚动，格子略大一些方便点按
+  const cellW = 30, cellH = 30, gap = 2;
+  const nameW = 96;
+  const headH = 40;
   const width = nameW + days.length * cellW + 8;
   const height = headH + emps.length * cellH + 8;
   const svg = svgEl('svg', { class: 'chart-svg', viewBox: `0 0 ${width} ${height}`, width, height });
@@ -608,7 +630,7 @@ function heatmap(container, data) {
     const t = svgEl('text', { x, y: 14, class: 'tick-label', 'text-anchor': 'middle', 'font-weight': dt.getDate() === 1 ? 600 : 400 });
     t.textContent = dt.getDate();
     svg.appendChild(t);
-    const w = svgEl('text', { x, y: 27, class: 'tick-label', 'text-anchor': 'middle', 'font-size': 9.5 });
+    const w = svgEl('text', { x, y: 28, class: 'tick-label', 'text-anchor': 'middle', 'font-size': 9.5 });
     w.textContent = WEEKDAYS[dt.getDay()];
     svg.appendChild(w);
   });
@@ -625,36 +647,39 @@ function heatmap(container, data) {
       const slots = cell ? cell.slots : [];
       const hours = cell ? cell.hours : 0;
       const r = { x: x + gap / 2, y: y + gap / 2, width: cellW - gap, height: cellH - gap };
+      const tier = hoursTier(hours, std);
 
-      if (!slots.length) {
-        // 空单元格：工作日画虚线框（缺勤待补），休息日画浅底
+      if (!tier) {
+        // 空单元格：工作日虚线框，休息日浅底
         if (d.is_workday) {
           svg.appendChild(svgEl('rect', {
-            ...r, rx: 3, fill: 'var(--surface-1)',
+            ...r, rx: 4, fill: 'var(--surface-1)',
             stroke: 'var(--grid)', 'stroke-width': 1, 'stroke-dasharray': '2 2',
           }));
         } else {
-          svg.appendChild(svgEl('rect', { ...r, rx: 3, fill: 'var(--surface-2)', opacity: 0.65 }));
+          svg.appendChild(svgEl('rect', { ...r, rx: 4, fill: 'var(--surface-2)', opacity: 0.7 }));
         }
       } else {
-        // 按工时着色：标准工时 = 满色，超出加深，不足变浅
-        const std = data.daily_hours || 8;
-        const ratio = Math.max(0, hours / std);
-        svg.appendChild(svgEl('rect', {
-          ...r, rx: 3,
-          fill: 'var(--series-1)',
-          'fill-opacity': Math.min(1, 0.28 + ratio * 0.62).toFixed(2),
-        }));
+        svg.appendChild(svgEl('rect', { ...r, rx: 4, fill: `var(${TIER_META[tier].var})` }));
+        // 格内直接标工时（颜色之外的第二重线索）
+        const lbl = svgEl('text', {
+          x: x + cellW / 2, y: y + cellH / 2 + 4,
+          class: 'cell-value', 'text-anchor': 'middle', 'font-size': 11,
+          fill: '#ffffff',
+        });
+        lbl.textContent = fmtNum(hours);
+        svg.appendChild(lbl);
       }
 
       const hit = svgEl('rect', { x, y, width: cellW, height: cellH, fill: 'transparent' });
       hit.addEventListener('mousemove', (ev) => {
         const detail = slots.map((s) => {
-          const t = s.start && s.end ? `${s.start}-${s.end} ` : '';
-          return `${t}${fmtNum(s.hours)}h${s.content ? ' · ' + esc(s.content) : ''}`;
+          const t2 = s.start && s.end ? `${s.start}-${s.end} ` : '';
+          return `${t2}${fmtNum(s.hours)}h${s.content ? ' · ' + esc(s.content) : ''}`;
         }).join('<br>');
+        const tierLbl = tier ? `（${TIER_META[tier].label}）` : '';
         showTip(`<div class="tip-title">${esc(e.name)} · ${d.date.slice(5)} ${weekdayCN(parseISO(d.date))}</div>
-          <div class="tip-row"><span>工时</span><b>${slots.length ? fmtNum(hours) + ' 小时' : (d.is_workday ? '未排班' : '休息')}</b></div>
+          <div class="tip-row"><span>工时</span><b>${tier ? fmtNum(hours) + ' 小时' + tierLbl : (d.is_workday ? '未排班' : '休息')}</b></div>
           ${detail ? `<div class="tip-row" style="display:block"><span style="display:block;line-height:1.6">${detail}</span></div>` : ''}`, ev);
       });
       hit.addEventListener('mouseleave', hideTip);
@@ -664,6 +689,7 @@ function heatmap(container, data) {
 
   const wrap = document.createElement('div');
   wrap.style.overflowX = 'auto';
+  wrap.className = 'heatmap-scroll';
   wrap.appendChild(svg);
   container.appendChild(wrap);
 }
@@ -855,9 +881,10 @@ async function renderDashboard() {
       </div>
       <div class="card-body">
         ${legendHtml([
-          { name: `不足 ${fmtNum((stats.daily_hours || 8) * 0.5)} 小时`, color: 'color-mix(in srgb, var(--series-1) 40%, transparent)' },
-          { name: `约 ${fmtNum(stats.daily_hours || 8)} 小时`, color: 'color-mix(in srgb, var(--series-1) 70%, transparent)' },
-          { name: '超时', color: 'var(--series-1)' },
+          { name: `不足 ${fmtNum((stats.daily_hours || 8) * 0.75)} 小时`, color: 'var(--tier-low)' },
+          { name: `正常（约 ${fmtNum(stats.daily_hours || 8)} 小时）`, color: 'var(--tier-ok)' },
+          { name: `超时（> ${fmtNum((stats.daily_hours || 8) * 1.25)} 小时）`, color: 'var(--tier-high)' },
+          { name: '未排班', color: 'var(--grid)' },
         ])}
         <div id="heatmap" class="chart-wrap"></div>
       </div>
@@ -2481,13 +2508,13 @@ async function renderPeople() {
         ${state.employees.length ? `
         <div class="table-wrap">
           <table class="data">
-            <thead><tr><th>姓名</th><th>工号</th><th>班组</th><th>应出勤口径</th><th></th></tr></thead>
+            <thead><tr><th>姓名</th><th class="col-no">工号</th><th class="col-team">班组</th><th>应出勤口径</th><th></th></tr></thead>
             <tbody>
               ${state.employees.map((e) => `
                 <tr>
                   <td><div class="name-cell"><span class="avatar">${esc(initials(e.name))}</span>${esc(e.name)}</div></td>
-                  <td>${esc(e.employee_no || '—')}</td>
-                  <td>${esc(e.team || '—')}</td>
+                  <td class="col-no">${esc(e.employee_no || '—')}</td>
+                  <td class="col-team">${esc(e.team || '—')}</td>
                   <td>${e.expect_mode === 'fixed'
                     ? `<span class="chip">固定 ${fmtNum(e.monthly_quota ?? 0)} 小时/月</span>`
                     : `<span class="chip">跟随工作日历${Number(e.daily_hours) > 0 ? ` · ${fmtNum(e.daily_hours)}h/天` : ''}</span>`}</td>
