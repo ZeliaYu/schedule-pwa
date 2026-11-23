@@ -22,3 +22,6 @@ _*.xlsx
 *.png
 !docs/icons/*.png
 !samples/*.png
+
+# 测试临时文件
+tests/_leave_state.json
