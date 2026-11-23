@@ -570,18 +570,18 @@ th.offday .sched-day .d { color: var(--text-muted); }
 }
 .slot-person {
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 14px; border-radius: 9px;
+  padding: 11px 16px; border-radius: 9px;
   background: var(--surface-2); cursor: pointer;
   border: 1px solid transparent; transition: border-color .12s;
-  min-width: 0; min-height: 44px;
+  min-width: 0; min-height: 52px;
 }
 .slot-person:hover { border-color: var(--border-strong); }
 .slot-person-name {
-  font-size: 15px; font-weight: 600; white-space: nowrap; flex: none;
+  font-size: 17px; font-weight: 600; white-space: nowrap; flex: none;
 }
 .slot-person-work {
   margin-left: auto; padding-left: 12px;
-  font-size: 13px; color: var(--text-secondary);
+  font-size: 16px; font-weight: 500; color: var(--text-primary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 .slot-person-work.muted { color: var(--text-muted); }
@@ -594,10 +594,13 @@ th.offday .sched-day .d { color: var(--text-muted); }
   padding: 12px 24px; border-top: 1px solid var(--grid); background: var(--surface-2);
 }
 .sheet-rest-label {
-  flex: none; font-size: 12px; font-weight: 600; color: var(--text-secondary);
-  padding: 2px 9px; border-radius: 999px; background: var(--surface-3);
+  flex: none; font-size: 14px; font-weight: 700; color: var(--text-secondary);
+  padding: 3px 11px; border-radius: 999px; background: var(--surface-3);
 }
-.sheet-rest-names { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.sheet-rest-names {
+  font-size: 16px; font-weight: 500; color: var(--text-secondary);
+  line-height: 1.75;
+}
 .sheet-rest-label.leave { background: #fdf0e4; color: #b4701e; }
 .rest-name { cursor: pointer; border-bottom: 1px dashed transparent; }
 .rest-name:hover { border-bottom-color: var(--border-strong); color: var(--text-secondary); }

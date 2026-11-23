@@ -186,110 +186,105 @@ function askText(title, defaultValue = '', placeholder = '') {
   });
 }
 
-/** 紧凑版工作内容选择器：下拉框（用于已有条目那一行） */
-function contentSelectHtml(id, current) {
-  const opts = contentOptions();
-  const cur = String(current || '');
-  const list = cur && !opts.includes(cur) ? [cur, ...opts] : opts;
-  return `
-    <select class="input content-select" id="${id}">
-      <option value="">— 未填 —</option>
-      ${list.map((c) => `<option value="${esc(c)}"${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('')}
-      <option value="__new__">＋ 新增内容…</option>
-    </select>`;
-}
-
-/** 绑定下拉选择器：选「新增内容」时提示输入并加入预设 */
-function bindContentSelect(root, id, onChange) {
-  const sel = $(`#${id}`, root);
-  if (!sel) return;
-  sel.addEventListener('change', async () => {
-    if (sel.value === '__new__') {
-      const v = await askText('新增工作内容', '', '如：巡检 / 清洗设备');
-      const name = String(v || '').trim();
-      if (!v || !name) { sel.value = sel.dataset.prev || ''; return; }
-      await rememberContent(name);
-      // 插到「新增内容」之前，并选中
-      const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = name;
-      sel.insertBefore(opt, sel.querySelector('option[value="__new__"]'));
-      sel.value = name;
-    }
-    sel.dataset.prev = sel.value;
-    if (onChange) onChange(sel.value);
-  });
-}
-
-/** 工作内容选择器（胶囊 + 输入框） */
+/** 工作内容选择器（多选胶囊 + 输入框，用「、」分隔多个内容） */
 function contentPickerHtml(id, current, extraClass = '') {
   const opts = contentOptions();
+  const picked = splitContents(current);
+  // 已选但不在预设里的也显示出来
+  const all = [...opts];
+  for (const c of picked) if (!all.includes(c)) all.push(c);
   return `
     <div class="content-picker ${extraClass}">
       <div class="content-chips" data-content-chips="${id}">
-        ${opts.map((c) => `
-          <button type="button" class="content-chip${c === current ? ' active' : ''}" data-content-value="${esc(c)}">${esc(c)}</button>`).join('')}
+        ${all.map((c) => `
+          <button type="button" class="content-chip${picked.includes(c) ? ' active' : ''}" data-content-value="${esc(c)}">${esc(c)}</button>`).join('')}
         <button type="button" class="content-chip add" data-content-add="${id}" title="新增工作内容">+ 新增</button>
       </div>
       <input class="input content-input" id="${id}" value="${esc(current || '')}"
-             placeholder="直接输入也行，回车可存为常用" autocomplete="off">
+             placeholder="可多选；也能直接输入，回车存为常用" autocomplete="off">
     </div>`;
 }
 
-/** 绑定工作内容选择器的事件 */
+/** 「理瓶、灌装」→ ['理瓶','灌装'] */
+function splitContents(raw) {
+  return String(raw || '').split(/[、,，]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+/** 绑定工作内容选择器的事件（点胶囊 = 加入/移出，多选） */
 function bindContentPicker(root, id, onChange) {
   const input = $(`#${id}`, root);
   const chips = $(`[data-content-chips="${id}"]`, root);
   if (!input || !chips) return;
 
+  // 按输入框内容刷新胶囊高亮
   const markActive = () => {
-    const v = input.value.trim();
+    const picked = splitContents(input.value);
     $$('.content-chip', chips).forEach((b) => {
       if (b.dataset.contentValue !== undefined) {
-        b.classList.toggle('active', b.dataset.contentValue === v);
+        b.classList.toggle('active', picked.includes(b.dataset.contentValue));
       }
     });
+  };
+
+  const toggle = (name) => {
+    const picked = splitContents(input.value);
+    const i = picked.indexOf(name);
+    if (i >= 0) picked.splice(i, 1);
+    else picked.push(name);
+    input.value = picked.join('、');
+    markActive();
+    if (onChange) onChange(input.value);
   };
 
   chips.addEventListener('click', async (e) => {
     const btn = e.target.closest('.content-chip');
     if (!btn) return;
     if (btn.dataset.contentAdd !== undefined) {
-      const v = input.value.trim();
-      if (!v) { input.focus(); return; }
-      await rememberContent(v);
-      // 追加一个新胶囊
+      const v = await askText('新增工作内容', '', '如：巡检 / 清洗设备');
+      const name = String(v || '').trim();
+      if (!name) return;
+      await rememberContent(name);
       const addBtn = $('[data-content-add]', chips);
-      if (!$$(`[data-content-value="${CSS.escape(v)}"]`, chips).length) {
+      if (!$$(`[data-content-value="${CSS.escape(name)}"]`, chips).length) {
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.className = 'content-chip';
-        chip.dataset.contentValue = v;
-        chip.textContent = v;
+        chip.dataset.contentValue = name;
+        chip.textContent = name;
         chips.insertBefore(chip, addBtn);
       }
-      markActive();
-      toast(`已把「${v}」加入常用`);
+      // 新增后直接选中
+      if (!splitContents(input.value).includes(name)) toggle(name);
+      else markActive();
+      toast(`已把「${name}」加入常用并选中`);
       return;
     }
-    if (btn.dataset.contentValue !== undefined) {
-      input.value = btn.dataset.contentValue;
-      markActive();
-      if (onChange) onChange(input.value);
-    }
+    if (btn.dataset.contentValue !== undefined) toggle(btn.dataset.contentValue);
   });
 
   input.addEventListener('input', markActive);
   input.addEventListener('change', () => { if (onChange) onChange(input.value); });
-  // 回车：若无完全匹配，顺便存为常用
+  // 回车：把输入框里还没存过的内容存为常用
   input.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    const v = input.value.trim();
-    if (!v) return;
-    await rememberContent(v);
+    const picked = splitContents(input.value);
+    if (!picked.length) return;
+    for (const c of picked) await rememberContent(c);
+    // 补上新出现的胶囊
+    const addBtn = $('[data-content-add]', chips);
+    for (const c of picked) {
+      if (!$$(`[data-content-value="${CSS.escape(c)}"]`, chips).length) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'content-chip';
+        chip.dataset.contentValue = c;
+        chip.textContent = c;
+        chips.insertBefore(chip, addBtn);
+      }
+    }
     markActive();
-    if (onChange) onChange(v);
+    if (onChange) onChange(input.value);
   });
   markActive();
 }
@@ -1334,7 +1329,7 @@ function openShiftPicker(date, empId) {
         <input class="input" type="number" step="0.5" min="0.5" data-slot-hours value="${fmtNum(a.hours)}">
         <span class="unit">小时</span>
       </div>
-      <div class="slot-content-wrap">${contentSelectHtml(`slotc-${a.id}`, a.content || '')}</div>
+      <div class="slot-content-wrap">${contentPickerHtml(`slotc-${a.id}`, a.content || '', 'compact')}</div>
       <button class="icon-btn slot-del" data-slot-del title="删除这条" aria-label="删除">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -1395,7 +1390,7 @@ function openShiftPicker(date, empId) {
           const s = $('[data-slot-start]', row).value;
           const e = $('[data-slot-end]', row).value;
           const h = Number($('[data-slot-hours]', row).value);
-          const content = ($('.content-select', row).value || '').trim();
+          const content = ($('.content-input', row).value || '').trim();
           if (!(h > 0)) { toast('工时需大于 0', true); return; }
           try {
             await api(`/schedule/${id}`, { method: 'PUT', body: { start: s, end: e, hours: h, content } });
@@ -1408,7 +1403,7 @@ function openShiftPicker(date, empId) {
         $('[data-slot-start]', row).addEventListener('change', save);
         $('[data-slot-end]', row).addEventListener('change', save);
         $('[data-slot-hours]', row).addEventListener('change', save);
-        bindContentSelect(row, `slotc-${id}`, () => save());
+        bindContentPicker(row, `slotc-${id}`, () => save());
         $('[data-slot-del]', row).addEventListener('click', async () => {
           try {
             await api(`/schedule/${id}`, { method: 'DELETE' });
@@ -2032,7 +2027,7 @@ function drawDaySheetCanvas(target, d, assigns, groups, restOff, onLeave, orgNam
   let y = 0;
   const peopleCols = 2;
   const cardGap = 12;
-  const cardH = 44;
+  const cardH = 54;
   const cardW = (INNER - cardGap * (peopleCols - 1)) / peopleCols;
 
   const headerH = 118;
@@ -2045,13 +2040,14 @@ function drawDaySheetCanvas(target, d, assigns, groups, restOff, onLeave, orgNam
   if (!groups.length) bodyH = 96;
 
   // 调休 / 请假名单折行
-  ctx.font = font(400, 13.5);
+  ctx.font = font(500, 17);
   const measure = (list) => (list.length && assigns.length)
-    ? wrapText(ctx, list.map((e) => e.name).join('、'), INNER - 70) : [];
+    ? wrapText(ctx, list.map((e) => e.name).join('、'), INNER - 90) : [];
   const restLines = measure(restOff);
   const leaveLines = measure(onLeave);
-  const restH = (restLines.length ? (26 + restLines.length * 20) : 0)
-              + (leaveLines.length ? (26 + leaveLines.length * 20) : 0);
+  const lineH = 26;
+  const restH = (restLines.length ? (40 + restLines.length * lineH) : 0)
+              + (leaveLines.length ? (40 + leaveLines.length * lineH) : 0);
 
   const footerH = 40;
   const H = PAD + headerH + bodyH + restH + footerH + 24;
@@ -2181,23 +2177,23 @@ function drawDaySheetCanvas(target, d, assigns, groups, restOff, onLeave, orgNam
 
       // 姓名
       ctx.fillStyle = '#1a1a19';
-      ctx.font = font(600, 16);
-      const pad = 14;
+      ctx.font = font(700, 19);
+      const pad = 16;
       const nameW = ctx.measureText(e.name).width;
-      ctx.fillText(e.name, x + pad, cy + cardH / 2 + 6);
+      ctx.fillText(e.name, x + pad, cy + cardH / 2 + 7);
 
-      // 工作内容（靠右，超长省略）
+      // 工作内容（靠右，大字；超长才省略）
       const work = a.content || '';
       if (work) {
-        ctx.font = font(400, 13.5);
-        const avail = cardW - pad * 2 - nameW - 10;
+        ctx.font = font(600, 17);
+        const avail = cardW - pad * 2 - nameW - 14;
         let txt = work;
         if (ctx.measureText(txt).width > avail) {
           while (txt.length && ctx.measureText(txt + '…').width > avail) txt = txt.slice(0, -1);
           txt += '…';
         }
-        ctx.fillStyle = '#6b6b66';
-        ctx.fillText(txt, x + cardW - pad - ctx.measureText(txt).width, cy + cardH / 2 + 5);
+        ctx.fillStyle = '#3a3a37';
+        ctx.fillText(txt, x + cardW - pad - ctx.measureText(txt).width, cy + cardH / 2 + 6);
       }
     });
     y += Math.ceil(g.items.length / peopleCols) * (cardH + cardGap) + 6;
@@ -2227,19 +2223,19 @@ function drawDaySheetCanvas(target, d, assigns, groups, restOff, onLeave, orgNam
     y += 22;
 
     ctx.fillStyle = labelBg;
-    ctx.font = font(600, 12);
-    const lw = ctx.measureText(label).width + 22;
-    roundRectPath(ctx, PAD, y, lw, 24, 12);
+    ctx.font = font(700, 15);
+    const lw = ctx.measureText(label).width + 26;
+    roundRectPath(ctx, PAD, y, lw, 30, 15);
     ctx.fill();
     ctx.fillStyle = labelFg;
-    ctx.fillText(label, PAD + 11, y + 17);
+    ctx.fillText(label, PAD + 13, y + 21);
 
-    ctx.font = font(400, 13.5);
-    ctx.fillStyle = '#9a9893';
+    ctx.font = font(500, 17);
+    ctx.fillStyle = '#52514e';
     lines.forEach((ln, i) => {
-      ctx.fillText(ln, PAD + 60, y + 17 + i * 20);
+      ctx.fillText(ln, PAD + 78, y + 21 + i * lineH);
     });
-    y += lines.length * 20 + 4;
+    y += lines.length * lineH + 10;
   };
   drawNameBlock('调休', restLines, '#f0efea', '#6b6b66');
   drawNameBlock('请假', leaveLines, '#fdf0e4', '#b4701e');
