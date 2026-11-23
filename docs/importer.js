@@ -187,6 +187,7 @@
       employees: state.employees,
       assignments: state.assignments,
       adjustments: state.adjustments,
+      leaves: state.leaves || [],
       calendarDays: state.calendarDays,
       settings: state.settings,
       nextIds: state.nextIds,

@@ -84,6 +84,7 @@ def compute(state, frm, to, today=TODAY):
             'actual': 0.0, 'hist': 0.0, 'hist_days': set(), 'worked': set(),
             'manual_ot': 0.0, 'manual_owe': 0.0, 'manual_attend': 0.0,
             'rest_ot': 0.0, 'rest_days': set(), 'entries': [], 'adjustments': [],
+            'leave_days': set(), 'rest_off_days': set(),
         }
 
     for a in state['assignments']:
@@ -107,6 +108,20 @@ def compute(state, frm, to, today=TODAY):
             g['rest_days'].add(d)
         else:
             g['actual'] += h
+
+    for lv in state.get('leaves') or []:
+        d = parse_iso(lv['date'])
+        if d < start or d > end or d < counted_from:
+            continue
+        if not days.get(d, False):
+            continue
+        g = agg.get(lv['employee_id'])
+        if not g:
+            continue
+        if lv.get('kind') == 'leave':
+            g['leave_days'].add(d)
+        else:
+            g['rest_off_days'].add(d)
 
     for adj in state['adjustments']:
         d = parse_iso(adj['date'])
@@ -134,10 +149,11 @@ def compute(state, frm, to, today=TODAY):
         if not (own_std > 0):
             own_std = std
         q = e.get('monthly_quota')
+        leave_hours = len(g['leave_days']) * own_std
         if e.get('expect_mode') == 'fixed' and q not in (None, ''):
-            expected = float(q) * month_span
+            expected = float(q) * month_span - leave_hours
         else:
-            expected = workdays * own_std
+            expected = workdays * own_std - leave_hours
 
         period_actual = g['actual'] - g['hist'] + g['manual_attend']
         actual = g['actual'] + g['rest_ot'] + g['manual_attend']
@@ -152,6 +168,8 @@ def compute(state, frm, to, today=TODAY):
             'historical_days': len(g['hist_days']), 'scheduled': r2(g['actual']),
             'manual_attend': r2(g['manual_attend']), 'worked_days': len(g['worked']),
             'rest_overtime': r2(g['rest_ot']), 'rest_days': len(g['rest_days']),
+            'leave_days': len(g['leave_days']), 'rest_off_days': len(g['rest_off_days']),
+            'leave_hours': r2(len(g['leave_days']) * own_std),
             'net': r2(net), 'net_final': r2(net_final),
             'auto_overtime': r2(max(0, net)), 'auto_owe': r2(max(0, -net)),
             'manual_overtime': r2(g['manual_ot']), 'manual_owe': r2(abs(g['manual_owe'])),

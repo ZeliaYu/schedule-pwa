@@ -748,12 +748,14 @@ async function loadDay() {
   const d = iso(state.dayCursor);
   // 当月区间用于「当月加班/欠班」列
   const r = monthRange(state.dayCursor.getFullYear(), state.dayCursor.getMonth());
-  const [schedule, stats] = await Promise.all([
+  const [schedule, stats, leaves] = await Promise.all([
     api(`/schedule?date_from=${d}&date_to=${d}`),
     api(`/stats?date_from=${r.from}&date_to=${r.to}`),
+    api(`/leaves?date_from=${d}&date_to=${d}`),
   ]);
   state.schedule = schedule;
   state.dayStats = stats;
+  state.dayLeaves = leaves;
 }
 
 /* ------------------------------------------------------------ 视图：统计 */
@@ -951,7 +953,9 @@ function tableHtml(emps) {
           <tr>
             <td><div class="name-cell"><span class="avatar">${esc(initials(e.name))}</span><span class="name">${esc(e.name)}</span></div></td>
             <td>${esc(e.team || '—')}</td>
-            <td class="num">${fmtNum(e.expected)}</td>
+            <td class="num">${fmtNum(e.expected)}
+              ${e.leave_days > 0 ? `<div class="cell-sub">已扣请假 ${e.leave_days} 天</div>` : ''}
+            </td>
             <td class="num">${fmtNum(historical ? e.period_actual : e.actual)}</td>
             ${historical ? `<td class="num" style="color:var(--text-muted)">${fmtNum(e.actual)}</td>` : ''}
             <td class="num ${e.overtime > 0 ? 'num-pos' : 'num-zero'}">
@@ -1003,6 +1007,8 @@ function openEmployeeStats(e) {
       <div class="hint-box" style="margin-bottom:14px">
         自动差额 <b>${e.net > 0 ? '+' : ''}${fmtNum(e.net)}</b> 小时（工作日排班 ${fmtNum(e.scheduled)} + 补出勤 ${fmtNum(e.manual_attend)} − 应出勤 ${fmtNum(e.expected)}）<br>
         ${e.rest_overtime > 0 ? `休息日上班 <b class="num-pos">+${fmtNum(e.rest_overtime)}</b> 小时（${e.rest_days} 天）<br>` : ''}
+        ${e.leave_days > 0 ? `请假 <b>${e.leave_days}</b> 天，应出勤已扣 ${fmtNum(e.leave_hours)} 小时（不计欠班）<br>` : ''}
+        ${e.rest_off_days > 0 ? `调休 <b>${e.rest_off_days}</b> 天<br>` : ''}
         手工调整：加班 +${fmtNum(e.manual_overtime)}，欠班 −${fmtNum(e.manual_owe)}<br>
         每天标准工时 ${fmtNum(e.daily_hours)} 小时
       </div>
@@ -1781,7 +1787,13 @@ async function renderDay() {
   const orgName = state.settings.org_name || '排班管理';
   // 按时间段分组（没有起止时间的归到「时间待定」）
   const groups = groupBySlot(assigns);
-  const noAssign = state.employees.filter((e) => !assigns.some((a) => a.employee_id === e.id));
+  const assignedEmpIds = new Set(assigns.map((a) => a.employee_id));
+  const leaves = state.dayLeaves || [];
+  const leaveOf = {};   // empId -> 'rest' | 'leave'
+  for (const lv of leaves) leaveOf[lv.employee_id] = lv.kind;
+  // 没排班的人默认算调休，标了请假的单独列出
+  const onLeave = state.employees.filter((e) => !assignedEmpIds.has(e.id) && leaveOf[e.id] === 'leave');
+  const restOff = state.employees.filter((e) => !assignedEmpIds.has(e.id) && leaveOf[e.id] !== 'leave');
 
   main.innerHTML = `
     <div class="range-bar no-print" style="justify-content:space-between">
@@ -1852,11 +1864,17 @@ async function renderDay() {
           </div>`}
       </div>
 
-      ${noAssign.length && assigns.length ? `
+      ${(restOff.length || onLeave.length) && assigns.length ? `
+        ${restOff.length ? `
         <div class="sheet-rest">
-          <span class="sheet-rest-label">休息</span>
-          <span class="sheet-rest-names">${noAssign.map((e) => esc(e.name)).join('、')}</span>
+          <span class="sheet-rest-label">调休</span>
+          <span class="sheet-rest-names">${restOff.map((e) => `<span class="rest-name" data-rest-emp="${e.id}" title="点击改为请假">${esc(e.name)}</span>`).join('、')}</span>
         </div>` : ''}
+        ${onLeave.length ? `
+        <div class="sheet-rest">
+          <span class="sheet-rest-label leave">请假</span>
+          <span class="sheet-rest-names">${onLeave.map((e) => `<span class="rest-name" data-rest-emp="${e.id}" title="点击改回调休">${esc(e.name)}</span>`).join('、')}</span>
+        </div>` : ''}` : ''}
 
       <div class="sheet-foot">
         <span>${esc(orgName)}</span>
@@ -1911,6 +1929,21 @@ async function renderDay() {
   $$('[data-sheet-emp]').forEach((el) => el.addEventListener('click', () => {
     openShiftPicker(target, Number(el.dataset.sheetEmp));
   }));
+  // 点调休/请假的人名 → 切换状态
+  $$('[data-rest-emp]').forEach((el) => el.addEventListener('click', () => {
+    toggleLeave(target, Number(el.dataset.restEmp));
+  }));
+}
+
+/** 切换某天的调休 / 请假 */
+async function toggleLeave(date, empId) {
+  const cur = (state.dayLeaves || []).find((l) => l.employee_id === empId);
+  const next = (cur && cur.kind === 'leave') ? 'rest' : 'leave';
+  try {
+    await api('/leaves', { method: 'POST', body: { date, employee_id: empId, kind: next } });
+    toast(next === 'leave' ? '已标为请假（不计欠班）' : '已改回调休');
+    renderDay();
+  } catch (e) { toast(e.message, true); }
 }
 
 /** 把当天排班按时段分组，用于看板展示 */
@@ -1985,7 +2018,7 @@ function wrapText(ctx, text, maxWidth) {
  * 把当天排班画成一张适合发群的图片
  * @returns {HTMLCanvasElement}
  */
-function drawDaySheetCanvas(target, d, assigns, groups, noAssign, orgName, isRest) {
+function drawDaySheetCanvas(target, d, assigns, groups, restOff, onLeave, orgName, isRest) {
   const W = 900;
   const PAD = 40;
   const INNER = W - PAD * 2;
@@ -2011,12 +2044,14 @@ function drawDaySheetCanvas(target, d, assigns, groups, noAssign, orgName, isRes
   }
   if (!groups.length) bodyH = 96;
 
-  // 休息名单折行
+  // 调休 / 请假名单折行
   ctx.font = font(400, 13.5);
-  const restNames = noAssign.map((e) => e.name).join('、');
-  const restLines = (noAssign.length && assigns.length)
-    ? wrapText(ctx, restNames, INNER - 70) : [];
-  const restH = restLines.length ? (26 + restLines.length * 20) : 0;
+  const measure = (list) => (list.length && assigns.length)
+    ? wrapText(ctx, list.map((e) => e.name).join('、'), INNER - 70) : [];
+  const restLines = measure(restOff);
+  const leaveLines = measure(onLeave);
+  const restH = (restLines.length ? (26 + restLines.length * 20) : 0)
+              + (leaveLines.length ? (26 + leaveLines.length * 20) : 0);
 
   const footerH = 40;
   const H = PAD + headerH + bodyH + restH + footerH + 24;
@@ -2181,8 +2216,9 @@ function drawDaySheetCanvas(target, d, assigns, groups, noAssign, orgName, isRes
     y += 18;
   }
 
-  // ---- 休息名单
-  if (restLines.length) {
+  // ---- 调休 / 请假名单
+  const drawNameBlock = (label, lines, labelBg, labelFg) => {
+    if (!lines.length) return;
     ctx.strokeStyle = '#ecebe5';
     ctx.beginPath();
     ctx.moveTo(PAD, y);
@@ -2190,21 +2226,23 @@ function drawDaySheetCanvas(target, d, assigns, groups, noAssign, orgName, isRes
     ctx.stroke();
     y += 22;
 
-    ctx.fillStyle = '#f0efea';
+    ctx.fillStyle = labelBg;
     ctx.font = font(600, 12);
-    const lw = ctx.measureText('休息').width + 22;
+    const lw = ctx.measureText(label).width + 22;
     roundRectPath(ctx, PAD, y, lw, 24, 12);
     ctx.fill();
-    ctx.fillStyle = '#6b6b66';
-    ctx.fillText('休息', PAD + 11, y + 17);
+    ctx.fillStyle = labelFg;
+    ctx.fillText(label, PAD + 11, y + 17);
 
     ctx.font = font(400, 13.5);
     ctx.fillStyle = '#9a9893';
-    restLines.forEach((ln, i) => {
+    lines.forEach((ln, i) => {
       ctx.fillText(ln, PAD + 60, y + 17 + i * 20);
     });
-    y += restLines.length * 20 + 4;
-  }
+    y += lines.length * 20 + 4;
+  };
+  drawNameBlock('调休', restLines, '#f0efea', '#6b6b66');
+  drawNameBlock('请假', leaveLines, '#fdf0e4', '#b4701e');
 
   // ---- 页脚
   const fy = H - 40;
@@ -2229,13 +2267,17 @@ async function exportDayImage(date) {
     .filter((a) => a.date === target)
     .sort((a, b) => (a.start || '99').localeCompare(b.start || '99'));
   const groups = groupBySlot(assigns);
-  const noAssign = state.employees.filter((e) => !assigns.some((a) => a.employee_id === e.id));
+  const assignedIds = new Set(assigns.map((a) => a.employee_id));
+  const leaves = await api(`/leaves?date_from=${target}&date_to=${target}`).catch(() => []);
+  const leaveIds = new Set(leaves.filter((l) => l.kind === 'leave').map((l) => l.employee_id));
+  const restOff = state.employees.filter((e) => !assignedIds.has(e.id) && !leaveIds.has(e.id));
+  const onLeave = state.employees.filter((e) => !assignedIds.has(e.id) && leaveIds.has(e.id));
   const dayCol = state.calendar?.days?.find?.((x) => x.date === target);
   const isRest = dayCol ? dayCol.is_workday === false : false;
   const orgName = state.settings.org_name || '排班管理';
 
   try {
-    const canvas = drawDaySheetCanvas(target, d, assigns, groups, noAssign, orgName, isRest);
+    const canvas = drawDaySheetCanvas(target, d, assigns, groups, restOff, onLeave, orgName, isRest);
     const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
     if (!blob) throw new Error('无法生成图片');
     downloadBlob(blob, `排班-${target}.png`, 'image/png');
@@ -2305,7 +2347,9 @@ function openAddPersonToDay(date) {
 
       <div class="batch-extra" id="batchExtra"></div>
     `,
-    footer: `<button class="btn" data-close>取消</button>
+    footer: `<button class="btn left" id="batchRestOff" title="选中的人标为调休">标记调休</button>
+      <button class="btn left" id="batchLeave" title="选中的人标为请假（不计欠班）">标记请假</button>
+      <button class="btn" data-close>取消</button>
       <button class="btn primary" id="batchApply">排班</button>`,
     onMount: (root, close) => {
       const startEl = $('#batchStart', root), endEl = $('#batchEnd', root), hoursEl = $('#batchHours', root);
@@ -2370,6 +2414,22 @@ function openAddPersonToDay(date) {
       });
       checks().forEach((c) => c.addEventListener('change', refreshCount));
       refreshCount();
+
+      // 一键把选中的人标为调休 / 请假（清掉当天已有排班）
+      const markLeave = async (kind) => {
+        const ids = selectedIds();
+        if (!ids.length) { toast('先选择人员', true); return; }
+        try {
+          for (const id of ids) {
+            await api('/leaves', { method: 'POST', body: { date, employee_id: id, kind } });
+          }
+          close();
+          toast(kind === 'leave' ? `已标记 ${ids.length} 人请假` : `已标记 ${ids.length} 人调休`);
+          setTimeout(() => renderCurrentView(), 0);
+        } catch (err) { toast(err.message, true); }
+      };
+      $('#batchRestOff', root).addEventListener('click', () => markLeave('rest'));
+      $('#batchLeave', root).addEventListener('click', () => markLeave('leave'));
 
       $('#batchApply', root).addEventListener('click', async () => {
         const ids = selectedIds();
@@ -2970,6 +3030,7 @@ function openClearAll() {
   const empCount = state.employees.length;
   const assignCount = store.state.assignments.length;
   const adjCount = store.state.adjustments.length;
+  const leaveCount = (store.state.leaves || []).length;
   const KEY = '清除';
 
   openModal({
@@ -2982,6 +3043,7 @@ function openClearAll() {
           · 人员 <b>${empCount}</b> 人<br>
           · 排班记录 <b>${assignCount}</b> 条<br>
           · 手工调整 <b>${adjCount}</b> 条<br>
+          · 调休 / 请假 <b>${leaveCount}</b> 条<br>
           · 统计起点、工作日设置、隐藏人员等设置一并清空
         </div>
       </div>

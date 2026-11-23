@@ -140,6 +140,8 @@
         rest_overtime: 0,     // 休息日排班的工时（额外加班）
         rest_scheduled: 0,    // 同上，用于「累计已上」显示
         rest_days: new Set(),
+        leave_days: new Set(),   // 请假（已批准，不计欠班）
+        rest_off_days: new Set(), // 调休
         entries: [],          // 明细：{ date, start, end, hours, content }
         adjustments: [],
       });
@@ -176,6 +178,16 @@
       }
     }
 
+    // 调休 / 请假：请假从应出勤里扣掉（不产生欠班），调休照常算
+    for (const lv of state.leaves || []) {
+      if (lv.date < start || lv.date > end || lv.date < countedFrom) continue;
+      if (!days[lv.date]) continue;   // 休息日本来就不计应出勤
+      const agg = perEmp.get(lv.employee_id);
+      if (!agg) continue;
+      if (lv.kind === 'leave') agg.leave_days.add(lv.date);
+      else agg.rest_off_days.add(lv.date);
+    }
+
     for (const adj of state.adjustments || []) {
       if (adj.date < start || adj.date > end) continue;
       const agg = perEmp.get(adj.employee_id);
@@ -203,11 +215,13 @@
     for (const e of employees) {
       const agg = perEmp.get(e.id);
       const ownStd = Number(e.daily_hours) > 0 ? Number(e.daily_hours) : std;
+      // 请假：从应出勤里扣掉（不计欠班）；调休不扣，按缺勤算
+      const leaveHours = agg.leave_days.size * ownStd;
       let expected;
       if (e.expect_mode === 'fixed' && e.monthly_quota !== null && e.monthly_quota !== undefined && e.monthly_quota !== '') {
-        expected = Number(e.monthly_quota) * monthSpan;
+        expected = Number(e.monthly_quota) * monthSpan - leaveHours;
       } else {
-        expected = totalWorkdays * ownStd;
+        expected = totalWorkdays * ownStd - leaveHours;
       }
       // agg.actual = 统计起点后工作日工时 + 起点前全部工时
       const periodActual = agg.actual - agg.historical_actual + agg.manual_attend;
@@ -233,6 +247,9 @@
         worked_days: agg.worked_days.size,
         rest_overtime: r2(restOT),
         rest_days: agg.rest_days.size,
+        leave_days: agg.leave_days.size,
+        rest_off_days: agg.rest_off_days.size,
+        leave_hours: r2(agg.leave_days.size * ownStd),
         net: r2(net),
         net_final: r2(netFinal),
         auto_overtime: r2(Math.max(0, net)),

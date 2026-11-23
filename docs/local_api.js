@@ -128,6 +128,7 @@
               st.employees = st.employees.filter((e) => e.id !== id);
               st.assignments = st.assignments.filter((a) => a.employee_id !== id);
               st.adjustments = st.adjustments.filter((a) => a.employee_id !== id);
+              st.leaves = (st.leaves || []).filter((l) => l.employee_id !== id);
             } else {
               emp.active = 0;
             }
@@ -170,6 +171,8 @@
               };
               st.assignments.push(row);
             }
+            // 排了班就不该再有调休 / 请假标记
+            st.leaves = (st.leaves || []).filter((l) => !(l.date === date && l.employee_id === Number(employee_id)));
             return { ...row };
           });
         }
@@ -237,6 +240,50 @@
             }
           }
           return { ok: true, changed };
+        });
+      }
+
+      /* ---------------------------------------------------- 调休 / 请假 */
+      if (route === '/leaves') {
+        if (method === 'GET') {
+          let rows = store.state.leaves.slice();
+          if (q.date_from) rows = rows.filter((a) => a.date >= q.date_from);
+          if (q.date_to) rows = rows.filter((a) => a.date <= q.date_to);
+          if (q.employee_id) rows = rows.filter((a) => a.employee_id === Number(q.employee_id));
+          rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
+          return rows.map((a) => {
+            const e = store.state.employees.find((x) => x.id === a.employee_id);
+            return { ...a, name: e ? e.name : '' };
+          });
+        }
+        if (method === 'POST') {
+          const { date, employee_id } = body || {};
+          const kind = body && body.kind === 'leave' ? 'leave' : 'rest';
+          if (!date || !employee_id) err('需要 date 和 employee_id');
+          return store.mutate((st) => {
+            const id = Number(employee_id);
+            // 同一人同一天只保留一种状态：先清掉旧的，再写入
+            st.leaves = st.leaves.filter((l) => !(l.date === date && l.employee_id === id));
+            // 标了调休/请假就不再算那天上班
+            st.assignments = st.assignments.filter((a) => !(a.date === date && a.employee_id === id));
+            const row = {
+              id: Importer.nextId(st, 'leave'),
+              date, employee_id: id, kind,
+              note: String((body && body.note) || ''),
+            };
+            st.leaves.push(row);
+            return { ...row };
+          });
+        }
+      }
+      if (route === '/leaves/clear') {
+        // 批量：把某些人某些日期的调休/请假取消（恢复成「未排班」）
+        const { dates = [], employee_ids = [] } = body || {};
+        return store.mutate((st) => {
+          const before = st.leaves.length;
+          st.leaves = st.leaves.filter((l) =>
+            !(dates.includes(l.date) && employee_ids.map(Number).includes(l.employee_id)));
+          return { ok: true, removed: before - st.leaves.length };
         });
       }
 

@@ -20,6 +20,7 @@ const EMPTY_STATE = () => ({
   employees: [],
   assignments: [],    // { date, employee_id, start, end, hours, content }
   adjustments: [],    // { date, employee_id, kind, amount(小时), note }
+  leaves: [],         // { date, employee_id, kind: 'rest'|'leave', note }  调休 / 请假
   calendarDays: {},   // "YYYY-MM-DD" -> { is_workday, note }
   settings: {
     work_weekdays: '1,2,3,4,5',   // 周一~周五（0=周日 … 6=周六）
@@ -28,7 +29,7 @@ const EMPTY_STATE = () => ({
     org_name: '排班管理',
     content_options: '',          // 工作内容预设，逗号分隔；留空则从已有排班自动汇总
   },
-  nextIds: { employee: 1, assignment: 1, adjustment: 1 },
+  nextIds: { employee: 1, assignment: 1, adjustment: 1, leave: 1 },
 });
 
 class MemoryBackend {
@@ -173,6 +174,7 @@ function migrate(loaded) {
     employees: Array.isArray(loaded.employees) ? loaded.employees : [],
     assignments: Array.isArray(loaded.assignments) ? loaded.assignments : [],
     adjustments: Array.isArray(loaded.adjustments) ? loaded.adjustments : [],
+    leaves: Array.isArray(loaded.leaves) ? loaded.leaves : [],
     calendarDays: loaded.calendarDays && typeof loaded.calendarDays === 'object' ? loaded.calendarDays : {},
   };
   delete st.shifts;   // v2 不再有班次概念（旧数据换算完后丢弃）
@@ -185,6 +187,7 @@ function migrate(loaded) {
   st.assignments = st.assignments.map((a) => ({
     note: '', source: 'manual', content: '', start: '', end: '', ...a,
   }));
+  st.leaves = st.leaves.map((l) => ({ note: '', kind: 'rest', ...l }));
   st.adjustments = st.adjustments.map((a) => ({ note: '', ...a }));
 
   if (isLegacy) {
@@ -231,6 +234,7 @@ function migrate(loaded) {
   st.nextIds.employee = Math.max(st.nextIds.employee || 1, maxId(st.employees) + 1);
   st.nextIds.assignment = Math.max(st.nextIds.assignment || 1, maxId(st.assignments) + 1);
   st.nextIds.adjustment = Math.max(st.nextIds.adjustment || 1, maxId(st.adjustments) + 1);
+  st.nextIds.leave = Math.max(st.nextIds.leave || 1, maxId(st.leaves) + 1);
   return st;
 }
 

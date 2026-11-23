@@ -598,6 +598,9 @@ th.offday .sched-day .d { color: var(--text-muted); }
   padding: 2px 9px; border-radius: 999px; background: var(--surface-3);
 }
 .sheet-rest-names { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.sheet-rest-label.leave { background: #fdf0e4; color: #b4701e; }
+.rest-name { cursor: pointer; border-bottom: 1px dashed transparent; }
+.rest-name:hover { border-bottom-color: var(--border-strong); color: var(--text-secondary); }
 
 .sheet-foot {
   display: flex; justify-content: space-between;
